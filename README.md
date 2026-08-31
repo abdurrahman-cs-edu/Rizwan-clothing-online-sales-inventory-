@@ -1,23 +1,23 @@
 # Rizwan Clothing - Inventory Management System
 
-A custom full-stack web application built to digitize and streamline daily retail operations, inventory tracking, and sales management for Rizwan Clothing[cite: 8].
+A custom full-stack web application built to digitize and streamline daily retail operations, inventory tracking, and sales management for Rizwan Clothing.
 
-* **Live Demo:** [https://final-project-one-gray.vercel.app](https://final-project-one-gray.vercel.app)[cite: 8]
-* **Repository:** [https://github.com/abdurrahman-cs-edu/final-project](https://github.com/abdurrahman-cs-edu/final-project)[cite: 8]
+* **Live Demo:** [https://final-project-one-gray.vercel.app](https://final-project-one-gray.vercel.app)
+* **Repository:** [https://github.com/abdurrahman-cs-edu/final-project](https://github.com/abdurrahman-cs-edu/final-project)
 
 ## Overview
-This project transitions traditional retail operations into a fully digital workflow. It tracks real-time inventory availability, monitors specific stock sizes and product categories, and handles multi-channel payment accounting[cite: 8].
+This project transitions traditional retail operations into a fully digital workflow. It tracks real-time inventory availability, monitors specific stock sizes and product categories, and handles multi-channel payment accounting.
 
 ## Tech Stack
-* **Frontend:** React, Vite, Tailwind CSS[cite: 8]
-* **Backend & Database:** Supabase (PostgreSQL with Row Level Security)[cite: 8]
-* **Deployment & Hosting:** Vercel[cite: 8]
-* **Version Control:** Git, GitHub[cite: 8]
+* **Frontend:** React, Vite, Tailwind CSS.
+* **Backend & Database:** Supabase (PostgreSQL with Row Level Security).
+* **Deployment & Hosting:** Vercel.
+* **Version Control:** Git, GitHub.
 
 ## Key Features
-* **Digital Inventory Tracking:** Real-time stock visibility across various product categories and specific clothing sizes[cite: 8].
-* **Automated Sales Processing:** Streamlines daily sales entries with automated calculations and record-keeping[cite: 8].
-* **Multiple Payment Channels:** Fully integrated tracking for diverse logistics and payment methods including Cash on Delivery, PostEx, local riders, and advance payments[cite: 8].
+* **Digital Inventory Tracking:** Real-time stock visibility across various product categories and specific clothing sizes.
+* **Automated Sales Processing:** Streamlines daily sales entries with automated calculations and record-keeping.
+* **Multiple Payment Channels:** Fully integrated tracking for diverse logistics and payment methods including Cash on Delivery, PostEx, local riders, and advance payments.
 
 ## Getting Started
 To run this project locally, follow these steps:
