@@ -1,16 +1,46 @@
-# React + Vite
+# Rizwan Clothing - Inventory Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A custom full-stack web application built to digitize and streamline daily retail operations, inventory tracking, and sales management for Rizwan Clothing[cite: 8].
 
-Currently, two official plugins are available:
+* **Live Demo:** [https://final-project-one-gray.vercel.app](https://final-project-one-gray.vercel.app)[cite: 8]
+* **Repository:** [https://github.com/abdurrahman-cs-edu/final-project](https://github.com/abdurrahman-cs-edu/final-project)[cite: 8]
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Overview
+This project transitions traditional retail operations into a fully digital workflow. It tracks real-time inventory availability, monitors specific stock sizes and product categories, and handles multi-channel payment accounting[cite: 8].
 
-## React Compiler
+## Tech Stack
+* **Frontend:** React, Vite, Tailwind CSS[cite: 8]
+* **Backend & Database:** Supabase (PostgreSQL with Row Level Security)[cite: 8]
+* **Deployment & Hosting:** Vercel[cite: 8]
+* **Version Control:** Git, GitHub[cite: 8]
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Key Features
+* **Digital Inventory Tracking:** Real-time stock visibility across various product categories and specific clothing sizes[cite: 8].
+* **Automated Sales Processing:** Streamlines daily sales entries with automated calculations and record-keeping[cite: 8].
+* **Multiple Payment Channels:** Fully integrated tracking for diverse logistics and payment methods including Cash on Delivery, PostEx, local riders, and advance payments[cite: 8].
 
-## Expanding the Oxlint configuration
+## Getting Started
+To run this project locally, follow these steps:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/abdurrahman-cs-edu/final-project.git
+   cd final-project
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables:**
+   Create a `.env` file in the root directory and add your Supabase project credentials:
+   ```env
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+4. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
