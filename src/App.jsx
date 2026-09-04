@@ -1,4 +1,4 @@
-name=App.jsx
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -438,7 +438,7 @@ export default function App() {
     const riderOpt = s.local_rider_sub_option || s.localRiderSubOption;
     if (pendingFilter === 'PostEx') return subOpt === 'PostEx';
     if (pendingFilter === 'D&D') return subOpt === 'Local Rider' && riderOpt === 'D&D';
-    if (pendingFilter === 'Other') return subOpt === 'Local Rider' && riderOpt !== 'D&D';
+    if (pendingFilter === 'Service Delivery') return subOpt === 'Local Rider' && riderOpt !== 'D&D';
     return true;
   });
 
@@ -502,7 +502,7 @@ export default function App() {
       const riderOpt = s.local_rider_sub_option || s.localRiderSubOption;
       if (pendingFilter === 'PostEx' && subOpt !== 'PostEx') return false;
       if (pendingFilter === 'D&D' && (subOpt !== 'Local Rider' || riderOpt !== 'D&D')) return false;
-      if (pendingFilter === 'Other' && (subOpt !== 'Local Rider' || riderOpt === 'D&D')) return false;
+      if (pendingFilter === 'Service Delivery' && (subOpt !== 'Local Rider' || riderOpt === 'D&D')) return false;
     }
     if (activeTab === 'PostEx Orders' && (s.paymentMethod !== 'Cash on Delivery' || (s.cod_sub_option || s.codSubOption) !== 'PostEx')) return false;
     
@@ -555,7 +555,9 @@ export default function App() {
                            <span className="text-xs font-medium text-gray-500">{sale.displayDate}</span>
                            
                            {sale.paymentMethod === 'Advance Payment' ? (
-                             <span className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-[11px] font-bold tracking-wide uppercase">Advance</span>
+                             <div className="flex flex-col">
+                               <span className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-[11px] font-bold tracking-wide uppercase">Advance</span>
+                             </div>
                            ) : (
                              <div className="flex gap-1.5 items-center">
                                <span className="px-2 py-0.5 bg-orange-50 text-orange-600 rounded text-[11px] font-bold tracking-wide uppercase">COD</span>
@@ -623,9 +625,9 @@ export default function App() {
                             </button>
 
                             {/* RELATIVE TIME AGO TEXT UNDER PAID BUTTON */}
-                            {currentCodPaid === 'Yes' && currentPaidAt && (
+                            {currentCodPaid === 'Yes' && (
                               <span className="text-[10px] text-gray-400 font-semibold mt-1 italic">
-                                {timeAgo(currentPaidAt)}
+                                {timeAgo(currentPaidAt || sale.id)}
                               </span>
                             )}
                           </div>
@@ -994,7 +996,7 @@ export default function App() {
                   { key: 'All', label: 'All Pending Payments' },
                   { key: 'PostEx', label: 'PostEx Pending' },
                   { key: 'D&D', label: 'D&D Pending' },
-                  { key: 'Other', label: 'Service Delivery / Other' }
+                  { key: 'Service Delivery', label: 'Service Delivery Pending' }
                 ].map((flt) => (
                   <button
                     key={flt.key}
@@ -1088,7 +1090,7 @@ export default function App() {
                       <label className="block text-sm font-medium text-orange-800 mb-1">Select Rider</label>
                       <select value={localRiderSubOption} onChange={(e) => setLocalRiderSubOption(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                         <option value="D&D">D&D</option>
-                        <option value="Other">Other</option>
+                        <option value="Service Delivery">Service Delivery</option>
                       </select>
                     </div>
                   )}
@@ -1201,7 +1203,12 @@ export default function App() {
                     <p className="text-gray-500">Payment Method</p>
                     <p className="font-semibold text-gray-900">{detailsModalSale.paymentMethod}</p>
                   </div>
-                  {detailsModalSale.paymentMethod === 'Cash on Delivery' && (
+                  {detailsModalSale.paymentMethod === 'Advance Payment' ? (
+                    <div>
+                      <p className="text-gray-500">Payment Status</p>
+                      <p className="font-bold text-green-600">Paid (Advance)</p>
+                    </div>
+                  ) : (
                     <>
                       <div>
                         <p className="text-gray-500">Courier/Rider</p>
@@ -1222,9 +1229,9 @@ export default function App() {
                         <p className={`font-bold ${detailsModalSale.cod_paid === 'Yes' ? 'text-green-600' : 'text-red-500'}`}>
                           {detailsModalSale.cod_paid === 'Yes' ? `Paid (${detailsModalSale.cod_payment_type})` : 'Unpaid'}
                         </p>
-                        {detailsModalSale.cod_paid === 'Yes' && (detailsModalSale.cod_paid_at || detailsModalSale.codPaidAt) && (
+                        {detailsModalSale.cod_paid === 'Yes' && (
                           <p className="text-xs text-gray-400 font-medium mt-0.5">
-                            {timeAgo(detailsModalSale.cod_paid_at || detailsModalSale.codPaidAt)}
+                            {timeAgo(detailsModalSale.cod_paid_at || detailsModalSale.codPaidAt || detailsModalSale.id)}
                           </p>
                         )}
                       </div>
