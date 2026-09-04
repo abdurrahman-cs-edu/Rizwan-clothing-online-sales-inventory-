@@ -2,7 +2,7 @@ name=App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
-export default function RizwanClothingApp() {
+export default function App() {
   useEffect(() => {
     document.title = "Dashboard - Rizwan Clothing";
   }, []);
