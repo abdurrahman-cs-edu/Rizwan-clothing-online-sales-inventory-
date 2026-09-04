@@ -1,3 +1,4 @@
+name=App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -1184,7 +1185,9 @@ export default function RizwanClothingApp() {
             <div className="p-6 border-b border-gray-100 flex justify-between items-start bg-gray-50 rounded-t-2xl">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{detailsModalSale.customerName}</h2>
-                <p className="text-sm text-gray-500 mt-1">Order #{detailsModalSale.orderNumber} • {detailsModalSale.displayDate}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Order #{detailsModalSale.orderNumber} • {detailsModalSale.displayDate} {detailsModalSale.displayTime ? `• ${detailsModalSale.displayTime}` : ''}
+                </p>
               </div>
               <button onClick={() => setDetailsModalSale(null)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
