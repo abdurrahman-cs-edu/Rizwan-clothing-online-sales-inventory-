@@ -31,6 +31,18 @@ export default function App() {
     return `Paid ${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? 's' : ''} ago`;
   }
 
+  // 12-Hour Time Formatting Helper (e.g., new Date() -> "3:21pm")
+  function formatTime12hr(date) {
+    if (!date) return '';
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = minutes < 10 ? '0' + minutes : String(minutes);
+    return `${hours}:${minutesStr}${ampm}`;
+  }
+
   // Readable Date Formatting Helper (e.g., "2026-08-01" -> "1 Aug 2026")
   function formatReadableDate(dateStr) {
     if (!dateStr) return '';
@@ -105,6 +117,7 @@ export default function App() {
   const [codSubOption, setCodSubOption] = useState('PostEx'); 
   const [localRiderSubOption, setLocalRiderSubOption] = useState('D&D'); 
   const [orderCode, setOrderCode] = useState('');
+  const [city, setCity] = useState(''); // Added city state
   
   const [orderItems, setOrderItems] = useState([
     { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
@@ -214,6 +227,7 @@ export default function App() {
             cod_sub_option: item.cod_sub_option || 'PostEx',
             local_rider_sub_option: item.local_rider_sub_option || 'D&D',
             orderCode: item.orderCode || '',
+            city: item.city || '', // Added city parsing
             cod_paid: item.cod_paid || 'No',
             cod_payment_type: item.cod_payment_type || 'Cash',
             cod_paid_at: item.cod_paid_at || null,
@@ -270,6 +284,7 @@ export default function App() {
     setCodSubOption('PostEx');
     setLocalRiderSubOption('D&D');
     setOrderCode('');
+    setCity(''); // Reset city
     setOrderItems([{ id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
     setIsModalOpen(true);
   };
@@ -281,6 +296,7 @@ export default function App() {
     setCodSubOption(sale.cod_sub_option || sale.codSubOption || 'PostEx');
     setLocalRiderSubOption(sale.local_rider_sub_option || sale.localRiderSubOption || 'D&D');
     setOrderCode(sale.orderCode || '');
+    setCity(sale.city || ''); // Set city for editing
     
     if (sale.items && sale.items.length > 0) {
       setOrderItems(sale.items.map((it, idx) => ({
@@ -323,7 +339,10 @@ export default function App() {
 
     const isCod = paymentMethod === 'Cash on Delivery';
     const isPostEx = isCod && codSubOption === 'PostEx';
+    const isLocalRider = isCod && codSubOption === 'Local Rider';
+
     if (isPostEx && !orderCode.trim()) return alert('Please enter an order code for PostEx.');
+    if (isLocalRider && !city.trim()) return alert('Please enter a city for the Local Rider.'); // City validation
 
     let totalQty = 0;
     let totalAmount = 0;
@@ -346,8 +365,9 @@ export default function App() {
           customerName: toTitleCase(customerName.trim()),
           paymentMethod,
           cod_sub_option: isCod ? codSubOption : '',
-          local_rider_sub_option: (isCod && codSubOption === 'Local Rider') ? localRiderSubOption : '',
+          local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
+          city: isLocalRider ? toTitleCase(city.trim()) : '', // Save city
           cod_paid: isCod ? (existingSale?.cod_paid || 'No') : 'No',
           cod_payment_type: isCod ? (existingSale?.cod_payment_type || 'Cash') : 'Cash',
           cod_paid_at: isCod ? (existingSale?.cod_paid_at || null) : null,
@@ -374,8 +394,9 @@ export default function App() {
           customerName: toTitleCase(customerName.trim()),
           paymentMethod,
           cod_sub_option: isCod ? codSubOption : '',
-          local_rider_sub_option: (isCod && codSubOption === 'Local Rider') ? localRiderSubOption : '',
+          local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
+          city: isLocalRider ? toTitleCase(city.trim()) : '', // Save city
           cod_paid: 'No',
           cod_payment_type: 'Cash',
           cod_paid_at: null,
@@ -384,7 +405,7 @@ export default function App() {
           totalAmount,
           dateStr: todayStr,
           displayDate: currentDate.toLocaleDateString(),
-          displayTime: currentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          displayTime: formatTime12hr(currentDate),
           isEdited: false,
         };
 
@@ -486,6 +507,7 @@ export default function App() {
       (s.customerName && s.customerName.toLowerCase().includes(query)) ||
       (s.paymentMethod && s.paymentMethod.toLowerCase().includes(query)) ||
       (s.orderCode && s.orderCode.toLowerCase().includes(query)) ||
+      (s.city && s.city.toLowerCase().includes(query)) ||
       (s.items && s.items.some(it => it.itemName && it.itemName.toLowerCase().includes(query))) ||
       String(s.orderNumber).includes(query);
   });
@@ -511,6 +533,7 @@ export default function App() {
       (s.customerName && s.customerName.toLowerCase().includes(query)) ||
       (s.paymentMethod && s.paymentMethod.toLowerCase().includes(query)) ||
       (s.orderCode && s.orderCode.toLowerCase().includes(query)) ||
+      (s.city && s.city.toLowerCase().includes(query)) ||
       (s.items && s.items.some(it => it.itemName && it.itemName.toLowerCase().includes(query))) ||
       String(s.orderNumber).includes(query);
   });
@@ -701,7 +724,7 @@ export default function App() {
             <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
               type="text" 
-              placeholder="Search orders, customers..." 
+              placeholder="Search orders, customers, or cities..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-purple-600 outline-none"
@@ -779,7 +802,7 @@ export default function App() {
                 <div className="bg-slate-50/90 p-6 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col justify-between">
                   <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 mb-4">
                     <div className="p-1.5 bg-blue-100 text-blue-700 rounded-md">
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012-2h-2a2 2 0 01-2-2z"></path></svg>
                     </div>
                     {appliedRange ? 'Selected Period Sales' : "Today's Sales"}
                   </div>
@@ -1011,269 +1034,377 @@ export default function App() {
                   </button>
                 ))}
               </div>
-
-              {renderOrdersTable(filteredSales)}
+              <div className="space-y-4">{renderOrdersTable(filteredSales)}</div>
             </div>
           )}
-
+          
           {activeTab === 'Top Selling Designs' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden max-w-2xl">
-               <ul className="divide-y divide-gray-100">
-                  {topDesigns.length > 0 ? topDesigns.map(([design, qty], index) => (
-                    <li key={design} className="flex justify-between items-center px-6 py-4 hover:bg-gray-50">
-                      <div className="flex items-center gap-4">
-                        <span className="text-gray-400 font-bold w-4">{index + 1}</span>
-                        <span className="font-medium text-blue-600">{design}</span>
-                      </div>
-                      <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold">{qty} sold</span>
-                    </li>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
+                    <th className="py-4 px-6">Rank</th>
+                    <th className="py-4 px-6">Design Name</th>
+                    <th className="py-4 px-6 text-right">Total Qty Sold</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {topDesigns.length > 0 ? topDesigns.map(([name, qty], index) => (
+                    <tr key={index} className="border-b border-gray-50">
+                      <td className="py-4 px-6 font-medium text-gray-900">#{index + 1}</td>
+                      <td className="py-4 px-6 font-bold text-blue-600">{name}</td>
+                      <td className="py-4 px-6 text-right font-medium text-gray-900">{qty}</td>
+                    </tr>
                   )) : (
-                    <li className="px-6 py-4 text-gray-500 text-sm">No sales found in this date range.</li>
+                    <tr><td colSpan="3" className="py-8 text-center text-gray-400">No designs found.</td></tr>
                   )}
-               </ul>
+                </tbody>
+              </table>
             </div>
           )}
+          
           {activeTab === 'Items Sold' && (
-             <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-md text-center">
-               <h3 className="text-gray-500 font-semibold text-sm uppercase tracking-wider mb-2">Total Individual Items Sold</h3>
-               <p className="text-5xl font-black text-gray-900">{displayItemsSold}</p>
-             </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
+                    <th className="py-4 px-6">Date</th>
+                    <th className="py-4 px-6">Customer & Order #</th>
+                    <th className="py-4 px-6">Design Name</th>
+                    <th className="py-4 px-6">Sizes</th>
+                    <th className="py-4 px-6 text-right">Qty</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {filteredSales.flatMap(sale => 
+                    (sale.items || []).map((it, idx) => (
+                      <tr key={`${sale.id}-${idx}`} className="border-b border-gray-50">
+                        <td className="py-4 px-6 font-medium text-gray-500">{sale.displayDate}</td>
+                        <td className="py-4 px-6">
+                          <span className="font-bold text-gray-900 block">{sale.customerName}</span>
+                          <span className="text-xs text-gray-500">Order #{sale.orderNumber}</span>
+                        </td>
+                        <td className="py-4 px-6 font-bold text-blue-600">{it.itemName}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex gap-1 flex-wrap">
+                            {it.sizeQty && Object.entries(it.sizeQty).map(([sz, qty]) => 
+                              qty > 0 ? <span key={sz} className="px-1.5 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-md font-medium">{sz}: {qty}</span> : null
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-right font-medium text-gray-900">{it.itemTotalQty}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
+
         </div>
       </main>
 
-      {/* Add / Edit Order Modal */}
+      {/* ADD / EDIT ORDER MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
-              <h2 className="text-xl font-bold text-gray-900">{editingId ? 'Edit Order' : 'Add New Order'}</h2>
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-xl font-bold text-gray-900">{editingId ? 'Edit Order' : 'New Order'}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
             
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              <div className="space-y-4 bg-gray-50/50 p-5 rounded-xl border border-gray-100">
+                <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Customer Details</h3>
+                
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-                  <input type="text" required value={customerName} onChange={(e) => setCustomerName(toTitleCase(e.target.value))} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                  <input type="text" required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder="John Doe" />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none">
+                  <select value={paymentMethod} onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    if(e.target.value === 'Cash on Delivery') setCodSubOption('PostEx');
+                  }} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow">
                     <option value="Advance Payment">Advance Payment</option>
                     <option value="Cash on Delivery">Cash on Delivery</option>
                   </select>
                 </div>
-              </div>
 
-              {paymentMethod === 'Cash on Delivery' && (
-                <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-orange-800 mb-1">COD Option</label>
-                    <select value={codSubOption} onChange={(e) => setCodSubOption(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                      <option value="PostEx">PostEx</option>
-                      <option value="Local Rider">Local Rider</option>
-                    </select>
-                  </div>
-                  
-                  {codSubOption === 'PostEx' && (
+                {paymentMethod === 'Cash on Delivery' && (
+                  <div className="pl-4 border-l-2 border-purple-200 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-orange-800 mb-1">PostEx Order Code</label>
-                      <input type="text" required value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. PE-12345" />
-                    </div>
-                  )}
-
-                  {codSubOption === 'Local Rider' && (
-                    <div>
-                      <label className="block text-sm font-medium text-orange-800 mb-1">Select Rider</label>
-                      <select value={localRiderSubOption} onChange={(e) => setLocalRiderSubOption(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                        <option value="D&D">D&D</option>
-                        <option value="Service Delivery">Service Delivery</option>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">COD Option</label>
+                      <select value={codSubOption} onChange={(e) => {
+                        setCodSubOption(e.target.value);
+                        if(e.target.value === 'Local Rider') setLocalRiderSubOption('D&D');
+                      }} className="w-full px-4 py-2 bg-white border border-purple-100 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none">
+                        <option value="PostEx">PostEx</option>
+                        <option value="Local Rider">Local Rider</option>
                       </select>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {codSubOption === 'PostEx' && (
+                      <div>
+                        <label className="block text-sm font-medium text-purple-800 mb-1">PostEx Order Code <span className="text-red-500">*</span></label>
+                        <input type="text" required value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. PX-12345" />
+                      </div>
+                    )}
+
+                    {codSubOption === 'Local Rider' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-orange-800 mb-1">Select Rider</label>
+                          <select value={localRiderSubOption} onChange={(e) => setLocalRiderSubOption(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+                            <option value="D&D">D&D</option>
+                            <option value="Service Delivery">Service Delivery</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-orange-800 mb-1">City <span className="text-red-500">*</span></label>
+                          <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" placeholder="Enter city name" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-4">
-                <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                  <h3 className="font-semibold text-gray-900">Designs & Sizes</h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Order Items</h3>
+                  <button type="button" onClick={handleAddAnotherDesign} className="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                    Add Design
+                  </button>
                 </div>
-                
-                {orderItems.map((item) => (
-                  <div key={item.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 relative">
-                    <button type="button" onClick={() => handleRemoveDesignItem(item.id)} className="absolute top-2 right-2 text-red-400 hover:text-red-600">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
+
+                {orderItems.map((item, index) => (
+                  <div key={item.id} className="bg-gray-50/50 p-5 rounded-xl border border-gray-100 space-y-4 relative">
+                    {orderItems.length > 1 && (
+                      <button type="button" onClick={() => handleRemoveDesignItem(item.id)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 bg-white rounded-full p-1 shadow-sm">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                    )}
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pr-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Design Name</label>
-                        <input type="text" required value={item.itemName} onChange={(e) => handleItemFieldChange(item.id, 'itemName', e.target.value)} className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-purple-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Design Name <span className="text-red-500">*</span></label>
+                        <input type="text" required value={item.itemName} onChange={(e) => handleItemFieldChange(item.id, 'itemName', e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder={`Design ${index + 1}`} />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Price (PKR)</label>
-                        <input type="number" required min="0" value={item.price} onChange={(e) => handleItemFieldChange(item.id, 'price', e.target.value)} className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md outline-none focus:border-purple-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (PKR) <span className="text-red-500">*</span></label>
+                        <input type="number" required min="0" value={item.price} onChange={(e) => handleItemFieldChange(item.id, 'price', e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder="2500" />
                       </div>
                     </div>
-                    
+
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-2">Quantities by Size</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Sizes & Quantities</label>
                       <div className="flex gap-3">
                         {['S', 'M', 'L', 'XL'].map(sz => (
-                          <div key={sz} className="flex-1 flex items-center border border-gray-200 rounded-md overflow-hidden bg-white">
-                            <span className="bg-gray-100 px-2 py-1.5 text-xs font-bold text-gray-600 border-r border-gray-200">{sz}</span>
-                            <input type="number" min="0" value={item.sizeQty[sz] || 0} onChange={(e) => handleItemSizeChange(item.id, sz, e.target.value)} className="w-full px-2 py-1.5 text-sm outline-none text-center" />
+                          <div key={sz} className="flex-1 flex flex-col items-center bg-white border border-gray-200 rounded-lg p-2 focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-transparent transition-all">
+                            <span className="text-xs font-bold text-gray-500 mb-1">{sz}</span>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              value={item.sizeQty[sz] === 0 ? '' : item.sizeQty[sz]} 
+                              onChange={(e) => handleItemSizeChange(item.id, sz, e.target.value)}
+                              className="w-full text-center text-sm font-medium outline-none bg-transparent"
+                              placeholder="0"
+                            />
                           </div>
                         ))}
                       </div>
                     </div>
                   </div>
                 ))}
-                
-                <button type="button" onClick={handleAddAnotherDesign} className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium hover:border-purple-500 hover:text-purple-600 transition-colors">
-                  + Add Another Design
-                </button>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 shadow-sm">{editingId ? 'Update Order' : 'Save Order'}</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
+                  {editingId ? 'Update Order' : 'Save Order'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Update COD Status Modal */}
+      {/* MARK AS PAID MODAL (COD ONLY) */}
       {codModalSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="font-bold text-gray-900">Update COD Status</h3>
+         <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+               <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <h2 className="text-lg font-bold text-gray-900">Update COD Status</h2>
+                  <button onClick={() => setCodModalSale(null)} className="text-gray-400 hover:text-gray-600">
+                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+               </div>
+               
+               <div className="p-5 space-y-5">
+                 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
+                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                      <button 
+                        onClick={() => setModalCodPaid('No')}
+                        className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${modalCodPaid === 'No' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}
+                      >
+                        Unpaid
+                      </button>
+                      <button 
+                        onClick={() => setModalCodPaid('Yes')}
+                        className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${modalCodPaid === 'Yes' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500'}`}
+                      >
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+
+                  {modalCodPaid === 'Yes' && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Payment Received Via</label>
+                      <select value={modalCodType} onChange={(e) => setModalCodType(e.target.value)} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none">
+                         <option value="Cash">Cash</option>
+                         <option value="Easypaisa">Easypaisa</option>
+                         <option value="Jazzcash">Jazzcash</option>
+                         <option value="Bank Transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-2">
+                     <button onClick={() => setCodModalSale(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                        Cancel
+                     </button>
+                     <button onClick={handleSaveCodModal} className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-bold rounded-lg shadow-sm transition-colors">
+                        Save Status
+                     </button>
+                  </div>
+               </div>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Has this order been paid?</label>
-                <select value={modalCodPaid} onChange={(e) => setModalCodPaid(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-600">
-                  <option value="No">No (Unpaid)</option>
-                  <option value="Yes">Yes (Paid)</option>
-                </select>
-              </div>
-              {modalCodPaid === 'Yes' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Received Via</label>
-                  <select value={modalCodType} onChange={(e) => setModalCodType(e.target.value)} className="w-full px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-600">
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </select>
-                </div>
-              )}
+         </div>
+      )}
+
+      {/* CUSTOMER DETAILS MODAL */}
+      {detailsModalSale && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+             
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 flex justify-between items-start text-white relative overflow-hidden">
+               <div className="absolute -right-4 -top-12 opacity-10">
+                 <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"></path></svg>
+               </div>
+               
+               <div className="relative z-10">
+                 <h2 className="text-2xl font-black">{detailsModalSale.customerName}</h2>
+                 <p className="text-purple-100 font-medium text-sm mt-1">Order Details • #{detailsModalSale.orderNumber}</p>
+               </div>
+               <button onClick={() => setDetailsModalSale(null)} className="text-white/70 hover:text-white relative z-10 bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+               </button>
             </div>
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
-              <button onClick={() => setCodModalSale(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium text-sm">Cancel</button>
-              <button onClick={handleSaveCodModal} className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700">Save Update</button>
+             
+            <div className="p-6 space-y-6">
+               
+               <div className="grid grid-cols-2 gap-4 text-sm">
+                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Date Logged</p>
+                    <p className="font-semibold text-gray-900 flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                      {detailsModalSale.displayDate}
+                      {detailsModalSale.displayTime && (
+                        <span className="text-gray-400 font-medium">• {detailsModalSale.displayTime}</span>
+                      )}
+                    </p>
+                 </div>
+                 
+                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Payment Type</p>
+                    {detailsModalSale.paymentMethod === 'Advance Payment' ? (
+                       <span className="inline-flex px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold uppercase tracking-wide">Advance</span>
+                    ) : (
+                       <div className="flex flex-col gap-1">
+                          <span className="inline-flex px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-bold uppercase tracking-wide w-fit">COD</span>
+                          <span className="text-xs font-medium text-gray-600">
+                            Via {detailsModalSale.cod_sub_option === 'Local Rider' ? (detailsModalSale.local_rider_sub_option || 'D&D') : 'PostEx'}
+                          </span>
+                       </div>
+                    )}
+                 </div>
+
+                 {/* Show City if it exists and is Local Rider */}
+                 {detailsModalSale.paymentMethod === 'Cash on Delivery' && detailsModalSale.cod_sub_option === 'Local Rider' && detailsModalSale.city && (
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 col-span-2">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">City</p>
+                      <p className="font-semibold text-gray-900">{detailsModalSale.city}</p>
+                    </div>
+                 )}
+                 
+                 {detailsModalSale.orderCode && (
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 col-span-2 flex items-center justify-between">
+                       <div>
+                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">PostEx Tracking Code</p>
+                         <p className="font-mono font-bold text-purple-700 text-base">{detailsModalSale.orderCode}</p>
+                       </div>
+                       <button onClick={() => {
+                           navigator.clipboard.writeText(detailsModalSale.orderCode);
+                           alert('Tracking code copied!');
+                         }} 
+                         className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                         title="Copy Code"
+                       >
+                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                       </button>
+                    </div>
+                 )}
+               </div>
+               
+               <div>
+                 <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2 mb-3">Order Items ({detailsModalSale.totalQty} total)</h3>
+                 <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                    {(detailsModalSale.items || []).map((it, idx) => (
+                       <div key={idx} className="bg-white border border-gray-100 p-3 rounded-xl shadow-sm">
+                          <div className="flex justify-between items-start mb-2">
+                             <span className="font-bold text-blue-600">{it.itemName}</span>
+                             <span className="font-bold text-gray-900">PKR {(it.itemTotalAmount || 0).toLocaleString()}</span>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                             <div className="flex gap-1.5 flex-wrap">
+                               {it.sizeQty && Object.entries(it.sizeQty).map(([sz, qty]) => 
+                                 qty > 0 ? (
+                                   <span key={sz} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded font-bold">
+                                     {sz}: {qty}
+                                   </span>
+                                 ) : null
+                               )}
+                             </div>
+                             <span className="text-xs text-gray-500 font-medium">{it.itemTotalQty} x PKR {it.price}</span>
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+               </div>
+               
+               <div className="bg-gray-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md">
+                 <span className="font-medium text-sm text-gray-300 uppercase tracking-wider">Grand Total</span>
+                 <span className="text-2xl font-black">PKR {(detailsModalSale.totalAmount || 0).toLocaleString()}</span>
+               </div>
+               
             </div>
           </div>
         </div>
       )}
 
-      {/* Customer Details Modal */}
-      {detailsModalSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-start bg-gray-50 rounded-t-2xl">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{detailsModalSale.customerName}</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Order #{detailsModalSale.orderNumber} • {detailsModalSale.displayDate} {detailsModalSale.displayTime ? `• ${detailsModalSale.displayTime}` : ''}
-                </p>
-              </div>
-              <button onClick={() => setDetailsModalSale(null)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="mb-6 pb-6 border-b border-gray-100">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Delivery Information</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Payment Method</p>
-                    <p className="font-semibold text-gray-900">{detailsModalSale.paymentMethod}</p>
-                  </div>
-                  {detailsModalSale.paymentMethod === 'Advance Payment' ? (
-                    <div>
-                      <p className="text-gray-500">Payment Status</p>
-                      <p className="font-bold text-green-600">Paid (Advance)</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-gray-500">Courier/Rider</p>
-                        <p className="font-semibold text-gray-900">
-                          {detailsModalSale.cod_sub_option === 'Local Rider' 
-                            ? detailsModalSale.local_rider_sub_option 
-                            : detailsModalSale.cod_sub_option}
-                        </p>
-                      </div>
-                      {detailsModalSale.orderCode && (
-                        <div>
-                          <p className="text-gray-500">Tracking Code</p>
-                          <p className="font-semibold text-gray-900">{detailsModalSale.orderCode}</p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-gray-500">Payment Status</p>
-                        <p className={`font-bold ${detailsModalSale.cod_paid === 'Yes' ? 'text-green-600' : 'text-red-500'}`}>
-                          {detailsModalSale.cod_paid === 'Yes' ? `Paid (${detailsModalSale.cod_payment_type})` : 'Unpaid'}
-                        </p>
-                        {detailsModalSale.cod_paid === 'Yes' && (
-                          <p className="text-xs text-gray-400 font-medium mt-0.5">
-                            {timeAgo(detailsModalSale.cod_paid_at || detailsModalSale.codPaidAt || detailsModalSale.id)}
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Order Items</h3>
-                <div className="space-y-3">
-                  {(detailsModalSale.items || []).map((it, idx) => (
-                    <div key={idx} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center border border-gray-100">
-                      <div>
-                        <p className="font-bold text-blue-600">{it.itemName}</p>
-                        <div className="flex gap-2 mt-1">
-                          {Object.entries(it.sizeQty).map(([sz, qty]) => qty > 0 ? (
-                            <span key={sz} className="text-xs bg-white border border-gray-200 px-1.5 py-0.5 rounded text-gray-600 font-medium">{sz}: {qty}</span>
-                          ) : null)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-gray-700">PKR {it.price}</p>
-                        <p className="text-xs text-gray-500">Qty: {it.itemTotalQty}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="p-6 bg-gray-50 border-t border-gray-100 rounded-b-2xl flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-500">Total Items</p>
-                <p className="text-lg font-bold text-gray-900">{detailsModalSale.totalQty}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">Grand Total</p>
-                <p className="text-2xl font-black text-gray-900">PKR {(detailsModalSale.totalAmount || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
