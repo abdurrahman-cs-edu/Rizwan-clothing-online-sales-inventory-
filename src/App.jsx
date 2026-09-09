@@ -550,14 +550,14 @@ export default function App() {
   const renderOrdersTable = (ordersToRender = filteredSales) => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full table-fixed text-left border-collapse">
           <thead>
             <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
-              <th className="py-4 px-6">Product name & Customer</th>
-              <th className="py-4 px-6">Sizes</th>
-              <th className="py-4 px-6">Total Qty</th>
-              <th className="py-4 px-6">Amount</th>
-              <th className="py-4 px-6 text-right">Action</th>
+              <th className="py-4 px-2 sm:px-6 w-[34%] sm:w-auto">Product name & Customer</th>
+              <th className="py-4 px-2 sm:px-6 w-[20%] sm:w-auto">Sizes</th>
+              <th className="py-4 px-2 sm:px-6 w-[12%] sm:w-auto">Total Qty</th>
+              <th className="py-4 px-2 sm:px-6 w-[19%] sm:w-auto">Amount</th>
+              <th className="py-4 px-2 sm:px-6 text-right w-[15%] sm:w-auto">Action</th>
             </tr>
           </thead>
           <tbody className="text-sm">
@@ -569,9 +569,9 @@ export default function App() {
 
                 return (
                   <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="py-4 px-6 align-top">
+                    <td className="py-3 px-2 sm:py-4 sm:px-6 align-top break-words">
                       <div className="flex flex-col gap-1">
-                         <button onClick={() => setDetailsModalSale(sale)} className="text-left font-bold text-gray-900 hover:text-purple-600 transition-colors text-base">
+                         <button onClick={() => setDetailsModalSale(sale)} className="text-left font-bold text-gray-900 hover:text-purple-600 transition-colors text-sm sm:text-base break-words">
                            {sale.customerName}
                          </button>
                          
@@ -603,7 +603,7 @@ export default function App() {
                          </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6 align-top text-gray-600">
+                    <td className="py-3 px-2 sm:py-4 sm:px-6 align-top text-gray-600 break-words">
                       <div className="flex flex-col gap-2 mt-1">
                         {(sale.items || []).map((it, idx) => (
                           <div key={idx} className="flex gap-1.5 flex-wrap">
@@ -618,15 +618,15 @@ export default function App() {
                         ))}
                       </div>
                     </td>
-                    <td className="py-4 px-6 font-medium text-gray-900 align-top mt-1">{sale.totalQty}</td>
+                    <td className="py-3 px-2 sm:py-4 sm:px-6 font-medium text-gray-900 align-top mt-1 break-words">{sale.totalQty}</td>
                     
-                    <td className="py-4 px-6 font-bold text-gray-900 align-top text-base">
+                    <td className="py-3 px-2 sm:py-4 sm:px-6 font-bold text-gray-900 align-top text-xs sm:text-base break-words">
                       PKR {(sale.totalAmount || 0).toLocaleString()}
                     </td>
                     
-                    <td className="py-4 px-6 text-right align-top">
+                    <td className="py-3 px-1 sm:py-4 sm:px-6 text-right align-top">
                       <div className="flex flex-col items-end gap-1">
-                        <div className="flex gap-2">
+                        <div className="flex gap-1 sm:gap-2 justify-end">
                           <button onClick={() => handleEditClick(sale)} className="text-gray-400 hover:text-purple-600">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                           </button>
