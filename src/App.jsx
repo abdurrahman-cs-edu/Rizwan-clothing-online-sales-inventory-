@@ -76,6 +76,10 @@ export default function App() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Separate Khata ledger (shop-owner credit) - never included in sales totals
+  const [khataEntries, setKhataEntries] = useState([]);
+  const [khataLoading, setKhataLoading] = useState(true);
+
   // Live clock used to refresh relative payment timestamps
   const [, setRelativeTimeTick] = useState(0);
 
@@ -92,6 +96,8 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingFilter, setPendingFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [khataSearchTerm, setKhataSearchTerm] = useState('');
+  const [khataSelectedOwner, setKhataSelectedOwner] = useState(null);
   
   // DATE RANGE FILTER STATES
   const [startDate, setStartDate] = useState(todayStr);
@@ -111,6 +117,14 @@ export default function App() {
   const [modalCodPaid, setModalCodPaid] = useState('No');
   const [modalCodType, setModalCodType] = useState('Cash');
   const [detailsModalSale, setDetailsModalSale] = useState(null);
+  const [isKhataModalOpen, setIsKhataModalOpen] = useState(false);
+  const [editingKhataId, setEditingKhataId] = useState(null);
+  const [khataOwnerName, setKhataOwnerName] = useState('');
+  const [khataDesignItems, setKhataDesignItems] = useState([
+    { id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
+  ]);
+  const [khataPaid, setKhataPaid] = useState('No');
+  const [khataPaymentType, setKhataPaymentType] = useState('Cash');
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -128,6 +142,7 @@ export default function App() {
 
   useEffect(() => {
     fetchSalesData();
+    fetchKhataData();
   }, []);
 
   const fetchSalesData = async () => {
@@ -143,6 +158,247 @@ export default function App() {
       setSales(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchKhataData = async () => {
+    setKhataLoading(true);
+    const { data, error } = await supabase
+      .from('khata_entries')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching Khata:', error);
+      setKhataEntries([]);
+    } else {
+      setKhataEntries(data || []);
+    }
+    setKhataLoading(false);
+  };
+
+  const formatKhataDateTime = (dateValue) => {
+    if (!dateValue) return '';
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.toLocaleDateString('default', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    })} • ${formatTime12hr(d)}`;
+  };
+
+  const handleOpenKhataModal = () => {
+    setEditingKhataId(null);
+    setKhataOwnerName('');
+    setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+    setKhataPaid('No');
+    setKhataPaymentType('Cash');
+    setIsKhataModalOpen(true);
+  };
+
+  const handleEditKhata = (entry) => {
+    setEditingKhataId(entry.id);
+    setKhataOwnerName(entry.owner_name || '');
+    const savedSizeQty = entry.size_qty && typeof entry.size_qty === 'object'
+      ? {
+          S: Number(entry.size_qty.S) || 0,
+          M: Number(entry.size_qty.M) || 0,
+          L: Number(entry.size_qty.L) || 0,
+          XL: Number(entry.size_qty.XL) || 0
+        }
+      : { S: 0, M: 0, L: 0, XL: 0 };
+
+    const savedQty = Object.values(savedSizeQty).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+    const fallbackPrice = savedQty > 0 ? (Number(entry.amount) || 0) / savedQty : (Number(entry.amount) || 0);
+
+    setKhataDesignItems([{
+      id: Date.now(),
+      designName: entry.design_name || '',
+      price: String(entry.unit_price ?? fallbackPrice ?? ''),
+      sizeQty: savedQty > 0 ? savedSizeQty : { S: 1, M: 0, L: 0, XL: 0 }
+    }]);
+    setKhataPaid(entry.paid ? 'Yes' : 'No');
+    setKhataPaymentType(entry.payment_method || 'Cash');
+    setIsKhataModalOpen(true);
+  };
+
+  const handleKhataDesignSizeChange = (itemId, sizeKey, value) => {
+    const val = parseInt(value, 10);
+    setKhataDesignItems(prev =>
+      prev.map(item =>
+        item.id === itemId
+          ? {
+              ...item,
+              sizeQty: {
+                ...item.sizeQty,
+                [sizeKey]: Number.isNaN(val) ? 0 : Math.max(0, val)
+              }
+            }
+          : item
+      )
+    );
+  };
+
+  const getKhataItemQty = (item) =>
+    Object.values(item?.sizeQty || {}).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+
+  const getKhataItemAmount = (item) => {
+    const qty = getKhataItemQty(item);
+    const price = parseFloat(item?.price);
+    return Number.isFinite(price) ? qty * price : 0;
+  };
+
+  const handleKhataDesignChange = (itemId, field, value) => {
+    setKhataDesignItems(prev =>
+      prev.map(item =>
+        item.id === itemId
+          ? { ...item, [field]: field === 'designName' ? toTitleCase(value) : value }
+          : item
+      )
+    );
+  };
+
+  const handleAddKhataDesign = () => {
+    setKhataDesignItems(prev => [
+      ...prev,
+      { id: Date.now() + Math.floor(Math.random() * 1000), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
+    ]);
+  };
+
+  const handleRemoveKhataDesign = (itemId) => {
+    if (khataDesignItems.length === 1) return;
+    setKhataDesignItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const handleSubmitKhata = async (e) => {
+    e.preventDefault();
+
+    const ownerName = toTitleCase(khataOwnerName.trim());
+
+    if (!ownerName) return alert('Please enter the shop owner name.');
+
+    const cleanedDesignItems = khataDesignItems.map(item => {
+      const sizeQty = {
+        S: Number(item.sizeQty?.S) || 0,
+        M: Number(item.sizeQty?.M) || 0,
+        L: Number(item.sizeQty?.L) || 0,
+        XL: Number(item.sizeQty?.XL) || 0
+      };
+      const quantity = Object.values(sizeQty).reduce((sum, qty) => sum + qty, 0);
+      const unitPrice = parseFloat(item.price);
+      const amount = quantity * (Number.isFinite(unitPrice) ? unitPrice : 0);
+
+      return {
+        ...item,
+        designName: toTitleCase((item.designName || '').trim()),
+        sizeQty,
+        quantity,
+        unitPrice,
+        amount
+      };
+    });
+
+    const invalidItem = cleanedDesignItems.find(
+      item => !item.designName || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0
+    );
+
+    if (invalidItem) {
+      return alert('Please enter a design name, at least one suit quantity, and a valid price for every design.');
+    }
+
+    try {
+      const isNowPaid = khataPaid === 'Yes';
+
+      if (editingKhataId) {
+        const existingEntry = khataEntries.find(
+          entry => String(entry.id) === String(editingKhataId)
+        );
+
+        const wasPaid = !!existingEntry?.paid;
+        const paidAt = isNowPaid
+          ? (wasPaid && existingEntry?.paid_at
+              ? existingEntry.paid_at
+              : new Date().toISOString())
+          : null;
+
+        const payload = {
+          owner_name: ownerName,
+          design_name: cleanedDesignItems[0].designName,
+          unit_price: cleanedDesignItems[0].unitPrice,
+          size_qty: cleanedDesignItems[0].sizeQty,
+          quantity: cleanedDesignItems[0].quantity,
+          amount: cleanedDesignItems[0].amount,
+          paid: isNowPaid,
+          paid_at: paidAt,
+          payment_method: isNowPaid ? khataPaymentType : 'Cash'
+        };
+
+        const { error } = await supabase
+          .from('khata_entries')
+          .update(payload)
+          .eq('id', editingKhataId);
+
+        if (error) throw error;
+      } else {
+        const paidAt = isNowPaid ? new Date().toISOString() : null;
+
+        const payloads = cleanedDesignItems.map(item => ({
+          owner_name: ownerName,
+          design_name: item.designName,
+          unit_price: item.unitPrice,
+          size_qty: item.sizeQty,
+          quantity: item.quantity,
+          amount: item.amount,
+          paid: isNowPaid,
+          paid_at: paidAt,
+          payment_method: isNowPaid ? khataPaymentType : 'Cash'
+        }));
+
+        const { error } = await supabase
+          .from('khata_entries')
+          .insert(payloads);
+
+        if (error) throw error;
+      }
+
+      setIsKhataModalOpen(false);
+      setEditingKhataId(null);
+      setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+      await fetchKhataData();
+    } catch (error) {
+      console.error('Error saving Khata entry:', error);
+      alert(`Unable to save Khata entry.
+
+${error?.message || 'Unknown Supabase error'}`);
+    }
+  };
+
+  const handleDeleteKhata = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this Khata entry?')) return;
+
+    const { error } = await supabase
+      .from('khata_entries')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Supabase Error: ' + error.message);
+    } else {
+      await fetchKhataData();
+    }
+  };
+
+  const handleExportKhata = () => {
+    const dataStr = JSON.stringify(khataEntries, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rizwan-clothing-khata-backup-${todayStr}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleApplyDateFilter = () => {
@@ -467,6 +723,61 @@ export default function App() {
   const displayedPendingCount = displayedPendingSales.length;
   const displayedPendingAmount = displayedPendingSales.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
 
+  const getEntryQtyFallback = (entry) => {
+    if (entry?.size_qty && typeof entry.size_qty === 'object') {
+      const qty = Object.values(entry.size_qty).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      if (qty > 0) return qty;
+    }
+    return Number(entry?.quantity) || 1;
+  };
+
+  // KHATA CALCULATIONS (fully separate from Online Sales)
+  const khataOwnerMap = {};
+  khataEntries.forEach(entry => {
+    const ownerName = (entry.owner_name || 'Unknown Owner').trim();
+
+    if (!khataOwnerMap[ownerName]) {
+      khataOwnerMap[ownerName] = {
+        name: ownerName,
+        pending: 0,
+        total: 0,
+        count: 0
+      };
+    }
+
+    const amount = Number(entry.amount) || 0;
+    khataOwnerMap[ownerName].total += amount;
+    khataOwnerMap[ownerName].count += 1;
+
+    if (!entry.paid) {
+      khataOwnerMap[ownerName].pending += amount;
+    }
+  });
+
+  const khataOwners = Object.values(khataOwnerMap).sort((a, b) => {
+    if (b.pending !== a.pending) return b.pending - a.pending;
+    return a.name.localeCompare(b.name);
+  });
+
+  const khataPendingTotal = khataEntries.reduce(
+    (acc, entry) => acc + (!entry.paid ? (Number(entry.amount) || 0) : 0),
+    0
+  );
+
+  const khataPendingOwners = khataOwners.filter(owner => owner.pending > 0).length;
+
+  const khataFilteredEntries = khataEntries.filter(entry => {
+    const matchesOwner = !khataSelectedOwner || entry.owner_name === khataSelectedOwner;
+    const query = khataSearchTerm.toLowerCase().trim();
+
+    const matchesSearch =
+      !query ||
+      (entry.owner_name && entry.owner_name.toLowerCase().includes(query)) ||
+      (entry.design_name && entry.design_name.toLowerCase().includes(query));
+
+    return matchesOwner && matchesSearch;
+  });
+
   // SALES HISTORY CALCULATIONS
   const salesHistoryFiltered = sales.filter(s => {
     if (historyFilterType === 'Month') {
@@ -702,6 +1013,7 @@ export default function App() {
             { name: 'Customer Orders', id: 'Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
             { name: 'PostEx COD Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
             { name: 'Pending Payments', id: 'Pending Payments', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+            { name: 'Khata', id: 'Khata', icon: 'M3 10h18M5 10V21M19 10V21M4 21h16M12 3l8 4H4l8-4zm-4 7v6m8-6v6' },
             { name: 'Sales History', id: 'Sales History', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
             { name: 'Top Selling Designs', id: 'Top Selling Designs', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
             { name: 'Items Sold', id: 'Items Sold', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' }
@@ -723,6 +1035,11 @@ export default function App() {
               {item.id === 'Pending Payments' && globalPendingCount > 0 && (
                 <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                   {globalPendingCount}
+                </span>
+              )}
+              {item.id === 'Khata' && khataPendingOwners > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                  {khataPendingOwners}
                 </span>
               )}
             </button>
@@ -748,9 +1065,9 @@ export default function App() {
             <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
               type="text" 
-              placeholder="Search orders, customers, or cities..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={activeTab === 'Khata' ? 'Search shop owners or designs...' : 'Search orders, customers, or cities...'}
+              value={activeTab === 'Khata' ? khataSearchTerm : searchTerm}
+              onChange={(e) => activeTab === 'Khata' ? setKhataSearchTerm(e.target.value) : setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-purple-600 outline-none"
             />
             </div>
@@ -772,7 +1089,7 @@ export default function App() {
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && (
+              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && activeTab !== 'Khata' && (
                 <div className="w-full xl:w-auto flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">From</span>
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm border-none outline-none text-gray-700 bg-transparent cursor-pointer font-medium flex-1 min-w-[130px]" />
@@ -798,13 +1115,27 @@ export default function App() {
                 </div>
               )}
 
-              <button onClick={handleExportBackup} className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-colors flex-1 sm:flex-none">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                Export
-              </button>
-              <button onClick={handleOpenAddModal} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center justify-center flex-1 sm:flex-none">
-                + New Order
-              </button>
+              {activeTab === 'Khata' ? (
+                <>
+                  <button onClick={handleExportKhata} className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-colors flex-1 sm:flex-none">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Export Khata
+                  </button>
+                  <button onClick={handleOpenKhataModal} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center justify-center flex-1 sm:flex-none">
+                    + Add Khata Entry
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={handleExportBackup} className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-colors flex-1 sm:flex-none">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Export
+                  </button>
+                  <button onClick={handleOpenAddModal} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center justify-center flex-1 sm:flex-none">
+                    + New Order
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1063,6 +1394,227 @@ export default function App() {
             </div>
           )}
           
+          {activeTab === 'Khata' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-red-50/80 border-2 border-red-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-red-600 uppercase tracking-wider">Total Pending Payment</p>
+                    <p className="text-3xl font-black text-gray-900 mt-1">PKR {khataPendingTotal.toLocaleString()}</p>
+                    <p className="text-xs text-red-500 mt-1 font-medium">Khata only • excluded from online sales</p>
+                  </div>
+                  <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 0 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  </div>
+                </div>
+
+                <div className="bg-white border-2 border-gray-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shop Owners</p>
+                    <p className="text-3xl font-black text-gray-900 mt-1">{khataOwners.length}</p>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">Owners with Khata records</p>
+                  </div>
+                  <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5V10H2v10h5m10 0v-5a5 5 0 00-10 0v5m10 0H7m5-13V3"></path></svg>
+                  </div>
+                </div>
+
+                <div className="bg-white border-2 border-gray-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending Owners</p>
+                    <p className="text-3xl font-black text-gray-900 mt-1">{khataPendingOwners}</p>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">Currently owing money</p>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Shop Owners</h2>
+                    <p className="text-xs text-gray-500 mt-1">Click an owner to view their entries, date/time, and payment status.</p>
+                  </div>
+                  {khataSelectedOwner && (
+                    <button
+                      onClick={() => setKhataSelectedOwner(null)}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Show All Owners
+                    </button>
+                  )}
+                </div>
+
+                {khataOwners.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {khataOwners
+                      .filter(owner => {
+                        const query = khataSearchTerm.toLowerCase().trim();
+                        return !query || owner.name.toLowerCase().includes(query);
+                      })
+                      .map(owner => (
+                        <button
+                          key={owner.name}
+                          onClick={() => setKhataSelectedOwner(prev => prev === owner.name ? null : owner.name)}
+                          className={`text-left bg-white border-2 p-5 rounded-2xl shadow-sm transition-all ${
+                            khataSelectedOwner === owner.name
+                              ? 'border-purple-500 bg-purple-50/50 shadow-md'
+                              : 'border-gray-200 hover:border-purple-300 hover:shadow-md'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-base font-bold text-gray-900 truncate">{owner.name}</h3>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {owner.count} {owner.count === 1 ? 'entry' : 'entries'}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ${
+                              owner.pending > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                            }`}>
+                              {owner.pending > 0 ? 'Pending' : 'Clear'}
+                            </span>
+                          </div>
+                          <div className="mt-5 pt-4 border-t border-gray-100">
+                            <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Pending Balance</p>
+                            <p className={`text-2xl font-black mt-1 ${
+                              owner.pending > 0 ? 'text-red-600' : 'text-green-600'
+                            }`}>
+                              PKR {owner.pending.toLocaleString()}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-gray-100 rounded-2xl p-10 text-center text-gray-400">
+                    <p className="font-medium">No Khata records yet.</p>
+                    <p className="text-xs mt-1">Add a shop owner payment using “Add Khata Entry”.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">
+                      {khataSelectedOwner ? `${khataSelectedOwner}'s Khata` : 'All Khata Entries'}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">Pending balances are separate from Online Sales.</p>
+                  </div>
+                  {khataSelectedOwner && (
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Pending Balance</p>
+                      <p className="text-lg font-black text-red-600">
+                        PKR {(khataOwnerMap[khataSelectedOwner]?.pending || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
+                        {!khataSelectedOwner && <th className="py-4 px-5">Shop Owner</th>}
+                        <th className="py-4 px-5">Date & Time</th>
+                        <th className="py-4 px-5">Design</th>
+                        <th className="py-4 px-5">Sizes</th>
+                        <th className="py-4 px-5">Qty</th>
+                        <th className="py-4 px-5">Amount</th>
+                        <th className="py-4 px-5">Status</th>
+                        <th className="py-4 px-5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {khataFilteredEntries.length > 0 ? khataFilteredEntries.map(entry => (
+                        <tr key={entry.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                          {!khataSelectedOwner && (
+                            <td className="py-4 px-5 align-top">
+                              <button
+                                onClick={() => setKhataSelectedOwner(entry.owner_name)}
+                                className="font-bold text-gray-900 hover:text-purple-600 transition-colors"
+                              >
+                                {entry.owner_name}
+                              </button>
+                            </td>
+                          )}
+                          <td className="py-4 px-5 align-top">
+                            <div className="font-medium text-gray-700">{formatKhataDateTime(entry.created_at)}</div>
+                            {entry.paid && entry.paid_at && (
+                              <div className="text-[10px] text-green-600 font-semibold mt-1">
+                                {timeAgo(entry.paid_at)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4 px-5 align-top">
+                            <div className="font-bold text-blue-600">{entry.design_name}</div>
+                            {Number(entry.unit_price) > 0 && (
+                              <div className="text-[11px] text-gray-400 mt-1">PKR {Number(entry.unit_price).toLocaleString()} / suit</div>
+                            )}
+                          </td>
+                          <td className="py-4 px-5 align-top">
+                            <div className="flex flex-wrap gap-1.5">
+                              {['S', 'M', 'L', 'XL'].map(sz => {
+                                const qty = Number(entry.size_qty?.[sz]) || 0;
+                                return qty > 0 ? (
+                                  <span key={sz} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[11px] font-semibold">
+                                    {sz}: {qty}
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                          </td>
+                          <td className="py-4 px-5 align-top font-bold text-gray-900">{Number(entry.quantity) || getEntryQtyFallback(entry)}</td>
+                          <td className="py-4 px-5 align-top font-black text-gray-900">
+                            PKR {(Number(entry.amount) || 0).toLocaleString()}
+                          </td>
+                          <td className="py-4 px-5 align-top">
+                            <button
+                              onClick={() => handleEditKhata(entry)}
+                              title="Update payment status"
+                              className={`inline-flex px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wide font-bold transition-colors ${
+                                entry.paid
+                                  ? 'bg-green-50 text-green-600 hover:bg-green-100'
+                                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                            >
+                              {entry.paid ? `Paid (${entry.payment_method || 'Cash'})` : 'Unpaid'}
+                            </button>
+                          </td>
+                          <td className="py-4 px-5 align-top text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handleEditKhata(entry)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 bg-gray-100 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteKhata(entry.id)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={khataSelectedOwner ? '7' : '8'} className="py-10 text-center text-gray-400 font-medium">
+                            No Khata entries found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'Top Selling Designs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
@@ -1321,6 +1873,201 @@ export default function App() {
                </div>
             </div>
          </div>
+      )}
+
+      {/* KHATA ADD / EDIT MODAL */}
+      {isKhataModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingKhataId ? 'Edit Khata Entry' : 'Add Khata Entry'}
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Add each design separately. All entries remain in Khata only.
+                </p>
+              </div>
+              <button onClick={() => setIsKhataModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitKhata} className="p-5 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Shop Owner Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={khataOwnerName}
+                  onChange={(e) => setKhataOwnerName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                  placeholder="Ihsan"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Designs & Pending Amounts <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-gray-400 mt-1">Each design is saved as its own Khata entry.</p>
+                  </div>
+                  {!editingKhataId && (
+                    <button
+                      type="button"
+                      onClick={handleAddKhataDesign}
+                      className="shrink-0 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
+                      </svg>
+                      Add Another Design
+                    </button>
+                  )}
+                </div>
+
+                {khataDesignItems.map((item, index) => (
+                  <div key={item.id} className="relative bg-gray-50/60 border border-gray-200 rounded-xl p-4 space-y-3">
+                    {!editingKhataId && khataDesignItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveKhataDesign(item.id)}
+                        className="absolute top-3 right-3 text-red-400 hover:text-red-600 bg-white rounded-full p-1 shadow-sm"
+                        title="Remove this design"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </button>
+                    )}
+
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Design {index + 1}</div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Design Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={item.designName}
+                          onChange={(e) => handleKhataDesignChange(item.id, 'designName', e.target.value)}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                          placeholder="Black Embroidered Suit"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Price Per Suit (PKR)</label>
+                        <input
+                          type="number"
+                          required
+                          min="0.01"
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) => handleKhataDesignChange(item.id, 'price', e.target.value)}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                          placeholder="20000"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-2">Sizes & Quantity</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {['S', 'M', 'L', 'XL'].map(size => (
+                          <div key={size}>
+                            <label className="block text-[11px] font-bold text-gray-400 text-center mb-1">{size}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.sizeQty?.[size] ?? 0}
+                              onChange={(e) => handleKhataDesignSizeChange(item.id, size, e.target.value)}
+                              className="w-full px-2 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none text-center font-semibold"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-200">
+                      <div>
+                        <span className="text-xs font-semibold text-gray-500">Total Qty: </span>
+                        <span className="text-sm font-black text-gray-900">{getKhataItemQty(item)}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold text-gray-500">Total Amount: </span>
+                        <span className="text-sm font-black text-purple-700">PKR {getKhataItemAmount(item).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setKhataPaid('No')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+                      khataPaid === 'No' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    Unpaid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKhataPaid('Yes')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+                      khataPaid === 'Yes' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    Paid
+                  </button>
+                </div>
+              </div>
+
+              {khataPaid === 'Yes' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Received Via</label>
+                  <select
+                    value={khataPaymentType}
+                    onChange={(e) => setKhataPaymentType(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-green-500 outline-none"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Easypaisa">Easypaisa</option>
+                    <option value="Jazzcash">Jazzcash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsKhataModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors"
+                >
+                  {editingKhataId ? 'Update Khata' : 'Save Khata'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* CUSTOMER DETAILS MODAL */}
