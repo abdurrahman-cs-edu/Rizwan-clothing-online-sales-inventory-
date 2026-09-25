@@ -3,149 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 export default function App() {
-  // Server-verified 4-digit action PIN
-  const [pinModal, setPinModal] = useState({
-    open: false,
-    actionLabel: '',
-    value: '',
-    error: '',
-    verifying: false
-  });
-  const pinResolverRef = useRef(null);
-
   useEffect(() => {
     document.title = "Dashboard - Rizwan Clothing";
   }, []);
-
-  const requestActionPin = (actionLabel = 'perform this action') => {
-    const cachedPin = sessionStorage.getItem('rizwan_action_pin_v2');
-    if (cachedPin && /^\d{4}$/.test(cachedPin)) {
-      return Promise.resolve(cachedPin);
-    }
-
-    return new Promise((resolve) => {
-      pinResolverRef.current = resolve;
-      setPinModal({
-        open: true,
-        actionLabel,
-        value: '',
-        error: '',
-        verifying: false
-      });
-    });
-  };
-
-  const closePinModal = () => {
-    if (pinModal.verifying) return;
-    if (pinResolverRef.current) pinResolverRef.current(null);
-    pinResolverRef.current = null;
-    setPinModal({
-      open: false,
-      actionLabel: '',
-      value: '',
-      error: '',
-      verifying: false
-    });
-  };
-
-  const submitPinModal = async () => {
-    const pin = pinModal.value.trim();
-
-    if (!/^\d{4}$/.test(pin)) {
-      setPinModal((prev) => ({
-        ...prev,
-        error: 'Please enter exactly 4 digits.'
-      }));
-      return;
-    }
-
-    setPinModal((prev) => ({ ...prev, verifying: true, error: '' }));
-
-    try {
-      const { data, error } = await supabase.functions.invoke('protected-mutation', {
-        body: {
-          action: 'verify_pin',
-          pin
-        }
-      });
-
-      if (error) {
-        console.error('PIN verification function error:', error);
-        setPinModal((prev) => ({
-          ...prev,
-          verifying: false,
-          error: 'Could not verify the PIN. Check the Edge Function settings and try again.'
-        }));
-        return;
-      }
-
-      if (!data?.ok) {
-        setPinModal((prev) => ({
-          ...prev,
-          verifying: false,
-          value: '',
-          error: data?.error || 'Incorrect PIN.'
-        }));
-        return;
-      }
-
-      // Store only after Supabase has confirmed that the PIN is correct.
-      sessionStorage.setItem('rizwan_action_pin_v2', pin);
-
-      const resolve = pinResolverRef.current;
-      pinResolverRef.current = null;
-      setPinModal({
-        open: false,
-        actionLabel: '',
-        value: '',
-        error: '',
-        verifying: false
-      });
-
-      if (resolve) resolve(pin);
-    } catch (err) {
-      console.error('PIN verification exception:', err);
-      setPinModal((prev) => ({
-        ...prev,
-        verifying: false,
-        error: 'PIN verification failed. Please try again.'
-      }));
-    }
-  };
-
-  const clearActionPinSession = () => {
-    sessionStorage.removeItem('rizwan_action_pin_v2');
-    setPendingActionPin('');
-    setCodActionPin('');
-  };
-
-  const callProtectedMutation = async (action, payload, actionLabel, providedPin = '') => {
-    const pin = providedPin || await requestActionPin(actionLabel);
-    if (!pin) return { ok: false };
-
-    const { data, error } = await supabase.functions.invoke('protected-mutation', {
-      body: { action, pin, ...payload }
-    });
-
-    if (error) {
-      console.error('Protected mutation function error:', error);
-      window.alert('The protected action could not reach Supabase. Please check the Edge Function configuration.');
-      return { ok: false };
-    }
-
-    if (!data?.ok) {
-      if (
-        data?.error === 'Incorrect PIN.' ||
-        data?.error === 'Protected action PIN is not configured on the server.'
-      ) {
-        clearActionPinSession();
-      }
-      window.alert(data?.error || 'Action was not allowed.');
-      return { ok: false };
-    }
-
-    return { ok: true, data };
-  };
 
   function toTitleCase(str) {
     if (!str) return '';
@@ -265,8 +125,6 @@ export default function App() {
   ]);
   const [khataPaid, setKhataPaid] = useState('No');
   const [khataPaymentType, setKhataPaymentType] = useState('Cash');
-  const [pendingActionPin, setPendingActionPin] = useState('');
-  const [codActionPin, setCodActionPin] = useState('');
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -329,10 +187,7 @@ export default function App() {
     })} • ${formatTime12hr(d)}`;
   };
 
-  const handleOpenKhataModal = async () => {
-    const pin = await requestActionPin('add a Khata entry');
-    if (!pin) return;
-    setPendingActionPin(pin);
+  const handleOpenKhataModal = () => {
     setEditingKhataId(null);
     setKhataOwnerName('');
     setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
@@ -341,11 +196,7 @@ export default function App() {
     setIsKhataModalOpen(true);
   };
 
-  const handleEditKhata = async (entry, providedPin = '') => {
-    const pin = providedPin || await requestActionPin('edit this Khata entry');
-    if (!pin) return;
-    setPendingActionPin(pin);
-
+  const handleEditKhata = (entry) => {
     setEditingKhataId(entry.id);
     setKhataOwnerName(entry.owner_name || '');
     const savedSizeQty = entry.size_qty && typeof entry.size_qty === 'object'
@@ -423,6 +274,7 @@ export default function App() {
     e.preventDefault();
 
     const ownerName = toTitleCase(khataOwnerName.trim());
+
     if (!ownerName) return alert('Please enter the shop owner name.');
 
     const cleanedDesignItems = khataDesignItems.map(item => {
@@ -446,25 +298,30 @@ export default function App() {
       };
     });
 
-    if (cleanedDesignItems.some(item => !item.designName || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0)) {
+    const invalidItem = cleanedDesignItems.find(
+      item => !item.designName || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice <= 0
+    );
+
+    if (invalidItem) {
       return alert('Please enter a design name, at least one suit quantity, and a valid price for every design.');
     }
-
-    const pin = pendingActionPin || await requestActionPin(editingKhataId ? 'save this Khata edit' : 'add this Khata entry');
-    if (!pin) return;
 
     try {
       const isNowPaid = khataPaid === 'Yes';
 
       if (editingKhataId) {
-        const existingEntry = khataEntries.find(entry => String(entry.id) === String(editingKhataId));
+        const existingEntry = khataEntries.find(
+          entry => String(entry.id) === String(editingKhataId)
+        );
+
         const wasPaid = !!existingEntry?.paid;
         const paidAt = isNowPaid
-          ? (wasPaid && existingEntry?.paid_at ? existingEntry.paid_at : new Date().toISOString())
+          ? (wasPaid && existingEntry?.paid_at
+              ? existingEntry.paid_at
+              : new Date().toISOString())
           : null;
 
         const payload = {
-          id: editingKhataId,
           owner_name: ownerName,
           design_name: cleanedDesignItems[0].designName,
           unit_price: cleanedDesignItems[0].unitPrice,
@@ -476,10 +333,15 @@ export default function App() {
           payment_method: isNowPaid ? khataPaymentType : 'Cash'
         };
 
-        const result = await callProtectedMutation('update_khata', { id: editingKhataId, payload }, 'save this Khata edit', pin);
-        if (!result.ok) return;
+        const { error } = await supabase
+          .from('khata_entries')
+          .update(payload)
+          .eq('id', editingKhataId);
+
+        if (error) throw error;
       } else {
         const paidAt = isNowPaid ? new Date().toISOString() : null;
+
         const payloads = cleanedDesignItems.map(item => ({
           owner_name: ownerName,
           design_name: item.designName,
@@ -492,28 +354,38 @@ export default function App() {
           payment_method: isNowPaid ? khataPaymentType : 'Cash'
         }));
 
-        const result = await callProtectedMutation('insert_khata', { rows: payloads }, 'add this Khata entry', pin);
-        if (!result.ok) return;
+        const { error } = await supabase
+          .from('khata_entries')
+          .insert(payloads);
+
+        if (error) throw error;
       }
 
       setIsKhataModalOpen(false);
       setEditingKhataId(null);
-      setPendingActionPin('');
       setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
       await fetchKhataData();
     } catch (error) {
       console.error('Error saving Khata entry:', error);
-      alert(`Unable to save Khata entry.\n\n${error?.message || 'Unknown Supabase error'}`);
+      alert(`Unable to save Khata entry.
+
+${error?.message || 'Unknown Supabase error'}`);
     }
   };
 
   const handleDeleteKhata = async (id) => {
-    const pin = await requestActionPin('delete this Khata entry');
-    if (!pin) return;
     if (!window.confirm('Are you sure you want to delete this Khata entry?')) return;
 
-    const result = await callProtectedMutation('delete_khata', { id }, 'delete this Khata entry', pin);
-    if (result.ok) await fetchKhataData();
+    const { error } = await supabase
+      .from('khata_entries')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Supabase Error: ' + error.message);
+    } else {
+      await fetchKhataData();
+    }
   };
 
   const handleExportKhata = () => {
@@ -562,12 +434,6 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
 
-    const pin = await requestActionPin('import online sales data');
-    if (!pin) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
@@ -577,44 +443,29 @@ export default function App() {
           return;
         }
         setLoading(true);
+        let successCount = 0;
 
-        const payloads = importedData.map((item, index) => {
+        for (let item of importedData) {
           const cleanCustomerName = toTitleCase(item.customerName || item.name || 'Unknown');
           const cleanPaymentMethod = item.paymentMethod || 'Advance Payment';
+          
           let formattedItems = [];
-
           if (item.items && Array.isArray(item.items)) {
-            formattedItems = item.items.map(it => {
-              const sizeQty = {
-                S: Number(it.sizeQty?.S) || 0,
-                M: Number(it.sizeQty?.M) || 0,
-                L: Number(it.sizeQty?.L) || 0,
-                XL: Number(it.sizeQty?.XL) || 0
-              };
-              const q = Object.values(sizeQty).reduce((a, b) => a + b, 0);
-              const p = parseFloat(it.price || 0);
-              return {
-                itemName: toTitleCase(it.itemName || it.design || 'Design'),
-                price: p,
-                sizeQty,
-                itemTotalQty: q,
-                itemTotalAmount: q * p
-              };
-            });
+            formattedItems = item.items.map(it => ({
+              itemName: toTitleCase(it.itemName || it.design || 'Design'),
+              price: parseFloat(it.price || 0),
+              sizeQty: it.sizeQty || { S: 0, M: 0, L: 0, XL: 0 },
+              itemTotalQty: Object.values(it.sizeQty || {}).reduce((a, b) => a + b, 0),
+              itemTotalAmount: Object.values(it.sizeQty || {}).reduce((a, b) => a + b, 0) * parseFloat(it.price || 0)
+            }));
           } else {
             const sizes = item.sizes || { S: 0, M: 0, L: 0, XL: 0 };
-            const sizeQty = {
-              S: Number(sizes.S) || 0,
-              M: Number(sizes.M) || 0,
-              L: Number(sizes.L) || 0,
-              XL: Number(sizes.XL) || 0
-            };
             const price = parseFloat(item.price || 0);
-            const q = Object.values(sizeQty).reduce((a, b) => a + b, 0);
+            const q = Object.values(sizes).reduce((a, b) => a + b, 0);
             formattedItems = [{
               itemName: toTitleCase(item.design || item.itemName || 'Design'),
-              price,
-              sizeQty,
+              price: price,
+              sizeQty: sizes,
               itemTotalQty: q,
               itemTotalAmount: q * price
             }];
@@ -623,40 +474,36 @@ export default function App() {
           const totalQty = formattedItems.reduce((acc, curr) => acc + curr.itemTotalQty, 0);
           const totalAmount = formattedItems.reduce((acc, curr) => acc + curr.itemTotalAmount, 0);
           const nowIso = item.isoDate || todayStr;
-          const nextOrderNum = sales.length > 0
-            ? Math.max(...sales.map(s => Number(s.orderNumber) || 0)) + 1 + index
-            : 1 + index;
+          const nextOrderNum = sales.length > 0 ? Math.max(...sales.map(s => s.orderNumber || 0)) + 1 + successCount : 1 + successCount;
 
-          return {
-            id: item.id ? Number(item.id) : Date.now() + index,
+          const newRecord = {
+            id: item.id ? Number(item.id) : Date.now() + Math.floor(Math.random() * 1000),
             orderNumber: nextOrderNum,
             customerName: cleanCustomerName,
             paymentMethod: cleanPaymentMethod,
             cod_sub_option: item.cod_sub_option || 'PostEx',
             local_rider_sub_option: item.local_rider_sub_option || 'D&D',
             orderCode: item.orderCode || '',
-            city: item.city || '',
+            city: item.city || '', // Added city parsing
             cod_paid: item.cod_paid || 'No',
             cod_payment_type: item.cod_payment_type || 'Cash',
             cod_paid_at: item.cod_paid_at || null,
             items: formattedItems,
-            totalQty,
-            totalAmount,
+            totalQty: totalQty,
+            totalAmount: totalAmount,
             dateStr: nowIso,
             displayDate: item.date || nowIso,
             displayTime: item.time || '12:00 PM',
             isEdited: false
           };
-        });
 
-        const result = await callProtectedMutation('upsert_sales', { rows: payloads }, 'import online sales data', pin);
-        if (!result.ok) return;
-
-        alert(`Successfully imported ${payloads.length} orders!`);
-        await fetchSalesData();
+          const { error } = await supabase.from('sales').upsert([newRecord]);
+          if (!error) successCount++;
+        }
+        alert(`Successfully imported ${successCount} orders!`);
+        fetchSalesData();
       } catch (err) {
-        console.error(err);
-        alert('Error reading or importing JSON file.');
+        alert('Error reading JSON file.');
       } finally {
         setLoading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -687,58 +534,33 @@ export default function App() {
     setOrderItems(prev => prev.filter(item => item.id !== itemId));
   };
 
-  const closeSaleModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-    setPendingActionPin('');
-  };
-
-  const closeKhataModal = () => {
-    setIsKhataModalOpen(false);
-    setEditingKhataId(null);
-    setPendingActionPin('');
-  };
-
-  const closeCodModal = () => {
-    setCodModalSale(null);
-    setCodActionPin('');
-  };
-
-  const handleOpenAddModal = async () => {
-    const pin = await requestActionPin('add a new online order');
-    if (!pin) return;
-    setPendingActionPin(pin);
-
+  const handleOpenAddModal = () => {
     setEditingId(null);
     setCustomerName('');
     setPaymentMethod('Advance Payment');
     setCodSubOption('PostEx');
     setLocalRiderSubOption('D&D');
     setOrderCode('');
-    setCity('');
+    setCity(''); // Reset city
     setOrderItems([{ id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
     setIsModalOpen(true);
   };
 
-  const handleEditClick = async (sale) => {
-    const pin = await requestActionPin('edit this online order');
-    if (!pin) return;
-    setPendingActionPin(pin);
-
+  const handleEditClick = (sale) => {
     setEditingId(sale.id);
     setCustomerName(sale.customerName);
     setPaymentMethod(sale.paymentMethod || 'Advance Payment');
     setCodSubOption(sale.cod_sub_option || sale.codSubOption || 'PostEx');
     setLocalRiderSubOption(sale.local_rider_sub_option || sale.localRiderSubOption || 'D&D');
     setOrderCode(sale.orderCode || '');
-    setCity(sale.city || '');
-
+    setCity(sale.city || ''); // Set city for editing
+    
     if (sale.items && sale.items.length > 0) {
       setOrderItems(sale.items.map((it, idx) => ({
         id: Date.now() + idx,
         itemName: it.itemName,
-        price: it.price?.toString() || '',
-        sizeQty: { S: Number(it.sizeQty?.S) || 0, M: Number(it.sizeQty?.M) || 0, L: Number(it.sizeQty?.L) || 0, XL: Number(it.sizeQty?.XL) || 0 }
+        price: it.price.toString(),
+        sizeQty: { ...it.sizeQty }
       })));
     } else {
       setOrderItems([{ id: Date.now(), itemName: sale.itemName || '', price: sale.price?.toString() || '', sizeQty: { ...sale.sizeQty } }]);
@@ -746,31 +568,26 @@ export default function App() {
     setIsModalOpen(true);
   };
 
-  const handleUpdateCodStatus = async (saleId, newPaid, newType, providedPin = '') => {
-    const pin = providedPin || codActionPin || await requestActionPin('change this online order payment status');
-    if (!pin) return false;
-
+  // UPDATED COD STATUS WITH TIMESTAMP TRACKING
+  const handleUpdateCodStatus = async (saleId, newPaid, newType) => {
     const currentPaidAt = newPaid === 'Yes' ? new Date().toISOString() : null;
-    const result = await callProtectedMutation('update_cod', {
-      saleId,
-      cod_paid: newPaid,
-      cod_payment_type: newPaid === 'Yes' ? newType : 'Cash',
-      cod_paid_at: currentPaidAt
-    }, 'change this online order payment status', pin);
+    const { error } = await supabase
+      .from('sales')
+      .update({ 
+        cod_paid: newPaid, 
+        cod_payment_type: newPaid === 'Yes' ? newType : 'Cash',
+        cod_paid_at: currentPaidAt
+      })
+      .eq('id', saleId);
 
-    if (result.ok) {
-      await fetchSalesData();
-      return true;
-    }
-    return false;
+    if (error) alert('Supabase Error: ' + error.message);
+    else fetchSalesData();
   };
 
   const handleSaveCodModal = async () => {
     if (!codModalSale) return;
-    const pin = codActionPin || await requestActionPin('save this online order payment status');
-    if (!pin) return;
-    const ok = await handleUpdateCodStatus(codModalSale.id, modalCodPaid, modalCodType, pin);
-    if (ok) closeCodModal();
+    await handleUpdateCodStatus(codModalSale.id, modalCodPaid, modalCodType);
+    setCodModalSale(null);
   };
 
   const handleSubmit = async (e) => {
@@ -782,10 +599,11 @@ export default function App() {
     const isLocalRider = isCod && codSubOption === 'Local Rider';
 
     if (isPostEx && !orderCode.trim()) return alert('Please enter an order code for PostEx.');
-    if (isLocalRider && !city.trim()) return alert('Please enter a city for the Local Rider.');
+    if (isLocalRider && !city.trim()) return alert('Please enter a city for the Local Rider.'); // City validation
 
     let totalQty = 0;
     let totalAmount = 0;
+
     const formattedItems = orderItems.map(item => {
       const q = Object.values(item.sizeQty).reduce((a, b) => a + b, 0);
       const p = parseFloat(item.price);
@@ -794,13 +612,6 @@ export default function App() {
       totalAmount += amt;
       return { itemName: toTitleCase(item.itemName.trim()), price: p, sizeQty: { ...item.sizeQty }, itemTotalQty: q, itemTotalAmount: amt };
     });
-
-    if (formattedItems.some(item => !item.itemName || !Number.isFinite(item.price) || item.price <= 0 || item.itemTotalQty <= 0)) {
-      return alert('Please enter a design name, a valid unit price, and at least one suit quantity for every design.');
-    }
-
-    const pin = pendingActionPin || await requestActionPin(editingId ? 'save this online order edit' : 'add this online order');
-    if (!pin) return;
 
     const currentDate = new Date();
 
@@ -813,7 +624,7 @@ export default function App() {
           cod_sub_option: isCod ? codSubOption : '',
           local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
-          city: isLocalRider ? toTitleCase(city.trim()) : '',
+          city: isLocalRider ? toTitleCase(city.trim()) : '', // Save city
           cod_paid: isCod ? (existingSale?.cod_paid || 'No') : 'No',
           cod_payment_type: isCod ? (existingSale?.cod_payment_type || 'Cash') : 'Cash',
           cod_paid_at: isCod ? (existingSale?.cod_paid_at || null) : null,
@@ -823,8 +634,12 @@ export default function App() {
           isEdited: true,
         };
 
-        const result = await callProtectedMutation('update_sale', { id: editingId, payload: updatedData }, 'save this online order edit', pin);
-        if (!result.ok) return;
+        const { error } = await supabase
+          .from('sales')
+          .update(updatedData)
+          .eq('id', editingId);
+
+        if (error) throw error;
       } else {
         const nextOrderNum = sales.length > 0
           ? Math.max(...sales.map(s => Number(s.orderNumber) || 0)) + 1
@@ -838,7 +653,7 @@ export default function App() {
           cod_sub_option: isCod ? codSubOption : '',
           local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
-          city: isLocalRider ? toTitleCase(city.trim()) : '',
+          city: isLocalRider ? toTitleCase(city.trim()) : '', // Save city
           cod_paid: 'No',
           cod_payment_type: 'Cash',
           cod_paid_at: null,
@@ -851,12 +666,16 @@ export default function App() {
           isEdited: false,
         };
 
-        const result = await callProtectedMutation('insert_sale', { row: newSale }, 'add this online order', pin);
-        if (!result.ok) return;
+        const { error } = await supabase
+          .from('sales')
+          .insert([newSale]);
+
+        if (error) throw error;
       }
 
       await fetchSalesData();
-      closeSaleModal();
+      setIsModalOpen(false);
+      setEditingId(null);
     } catch (error) {
       console.error('Error saving order:', error);
       alert(`Unable to save order.\n\n${error?.message || 'Unknown Supabase error'}`);
@@ -864,12 +683,10 @@ export default function App() {
   };
 
   const handleDelete = async (id) => {
-    const pin = await requestActionPin('delete this online order');
-    if (!pin) return;
-    if (!window.confirm('Are you sure you want to delete this order?')) return;
-
-    const result = await callProtectedMutation('delete_sale', { id }, 'delete this online order', pin);
-    if (result.ok) await fetchSalesData();
+    if(window.confirm('Are you sure you want to delete this order?')) {
+      await supabase.from('sales').delete().eq('id', id);
+      fetchSalesData();
+    }
   };
 
   // DYNAMIC FILTERING & KPI CALCULATIONS
@@ -1132,10 +949,7 @@ export default function App() {
                         {sale.paymentMethod === 'Cash on Delivery' && (
                           <div className="flex flex-col items-end mt-1">
                             <button
-                              onClick={async () => {
-                                const pin = await requestActionPin('change this online payment status');
-                                if (!pin) return;
-                                setCodActionPin(pin);
+                              onClick={() => {
                                 setCodModalSale(sale);
                                 setModalCodPaid(sale.cod_paid || 'No');
                                 setModalCodType(sale.cod_payment_type || 'Cash');
@@ -1173,66 +987,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[#F8F9FB] font-sans text-gray-800">
-      {pinModal.open && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
-            <div className="px-6 pt-6 pb-4 text-center">
-              <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3zm0 0v2m-7 8h14a2 2 0 002-2v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">Admin PIN Required</h2>
-              <p className="text-sm text-gray-500 mt-1">Enter your 4-digit PIN to {pinModal.actionLabel}.</p>
-            </div>
-
-            <div className="px-6 pb-6">
-              <input
-                autoFocus
-                disabled={pinModal.verifying}
-                type="password"
-                inputMode="numeric"
-                maxLength={4}
-                value={pinModal.value}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setPinModal((prev) => ({ ...prev, value: digits, error: '' }));
-                }}
-                onKeyDown={(e) => {
-                  if (pinModal.verifying) return;
-                  if (e.key === 'Enter') submitPinModal();
-                  if (e.key === 'Escape') closePinModal();
-                }}
-                placeholder="••••"
-                className="w-full text-center text-3xl tracking-[0.6em] font-black px-4 py-4 rounded-2xl border-2 border-gray-200 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition"
-              />
-              {pinModal.error && (
-                <p className="mt-2 text-center text-xs font-semibold text-red-600">{pinModal.error}</p>
-              )}
-              <p className="mt-3 text-center text-xs text-gray-400">Once unlocked, you won't be asked again until this browser tab is closed.</p>
-
-              <div className="grid grid-cols-2 gap-3 mt-5">
-                <button
-                  type="button"
-                  onClick={closePinModal}
-                  disabled={pinModal.verifying}
-                  className="px-4 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={submitPinModal}
-                  disabled={pinModal.verifying}
-                  className="px-4 py-3 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 shadow-sm transition disabled:opacity-60 disabled:cursor-wait"
-                >
-                  {pinModal.verifying ? 'Checking...' : 'Unlock'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" style={{ display: 'none' }} />
 
@@ -1819,11 +1573,7 @@ export default function App() {
                           </td>
                           <td className="py-4 px-5 align-top">
                             <button
-                              onClick={async () => {
-                                const pin = await requestActionPin('change this Khata payment status');
-                                if (!pin) return;
-                                await handleEditKhata(entry, pin);
-                              }}
+                              onClick={() => handleEditKhata(entry)}
                               title="Update payment status"
                               className={`inline-flex px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wide font-bold transition-colors ${
                                 entry.paid
@@ -1941,7 +1691,7 @@ export default function App() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h2 className="text-xl font-bold text-gray-900">{editingId ? 'Edit Order' : 'New Order'}</h2>
-              <button onClick={closeSaleModal} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
@@ -2057,7 +1807,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100">
-                <button type="button" onClick={closeSaleModal} className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
                   Cancel
                 </button>
                 <button type="submit" className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
@@ -2075,7 +1825,7 @@ export default function App() {
             <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
                <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                   <h2 className="text-lg font-bold text-gray-900">Update COD Status</h2>
-                  <button onClick={closeCodModal} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setCodModalSale(null)} className="text-gray-400 hover:text-gray-600">
                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                   </button>
                </div>
@@ -2086,19 +1836,13 @@ export default function App() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
                     <div className="flex bg-gray-100 p-1 rounded-lg">
                       <button 
-                        onClick={async () => {
-                          const pin = codActionPin || await requestActionPin('change this online order payment status');
-                          if (pin) { setCodActionPin(pin); setModalCodPaid('No'); }
-                        }}
+                        onClick={() => setModalCodPaid('No')}
                         className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${modalCodPaid === 'No' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'}`}
                       >
                         Unpaid
                       </button>
                       <button 
-                        onClick={async () => {
-                          const pin = codActionPin || await requestActionPin('mark this online order as paid');
-                          if (pin) { setCodActionPin(pin); setModalCodPaid('Yes'); }
-                        }}
+                        onClick={() => setModalCodPaid('Yes')}
                         className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${modalCodPaid === 'Yes' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500'}`}
                       >
                         Paid
@@ -2119,7 +1863,7 @@ export default function App() {
                   )}
 
                   <div className="flex justify-end gap-2 pt-2">
-                     <button onClick={closeCodModal} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                     <button onClick={() => setCodModalSale(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
                         Cancel
                      </button>
                      <button onClick={handleSaveCodModal} className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-bold rounded-lg shadow-sm transition-colors">
@@ -2144,7 +1888,7 @@ export default function App() {
                   Add each design separately. All entries remain in Khata only.
                 </p>
               </div>
-              <button onClick={closeKhataModal} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setIsKhataModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
@@ -2309,7 +2053,7 @@ export default function App() {
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={closeKhataModal}
+                  onClick={() => setIsKhataModalOpen(false)}
                   className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                 >
                   Cancel
