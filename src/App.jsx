@@ -961,6 +961,73 @@ export default function App() {
     return matchesOwner && matchesSearch;
   });
 
+  // DESIGN NAME SUGGESTIONS
+  // Built from Supabase-backed sales + Khata history, so the same saved designs
+  // appear as suggestions on any laptop/device using this project.
+  const designSuggestions = Array.from(new Set([
+    ...sales.flatMap(sale => (sale.items || []).map(item => toTitleCase((item.itemName || '').trim()))),
+    ...khataEntries.map(entry => toTitleCase((entry.design_name || '').trim()))
+  ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+  // D&D PARCELS CALCULATIONS
+  // Uses existing Online Sales records only. No separate table is created.
+  // With no date filter, this includes the complete historical D&D record.
+  const allDndParcels = sales.filter(sale => {
+    const paymentMethodValue = sale.paymentMethod || '';
+    const codOption = sale.cod_sub_option || sale.codSubOption || '';
+    const riderOption = sale.local_rider_sub_option || sale.localRiderSubOption || '';
+
+    return paymentMethodValue === 'Cash on Delivery' &&
+      codOption === 'Local Rider' &&
+      riderOption === 'D&D';
+  });
+
+  const dndRangeFiltered = allDndParcels.filter(sale => {
+    if (!appliedRange) return true;
+    if (appliedRange.start && sale.dateStr && sale.dateStr < appliedRange.start) return false;
+    if (appliedRange.end && sale.dateStr && sale.dateStr > appliedRange.end) return false;
+    return true;
+  });
+
+  const dndDisplayedParcels = dndRangeFiltered.filter(sale => {
+    const query = searchTerm.toLowerCase().trim();
+    if (!query) return true;
+
+    return (
+      (sale.customerName && sale.customerName.toLowerCase().includes(query)) ||
+      (sale.city && sale.city.toLowerCase().includes(query)) ||
+      (sale.items && sale.items.some(item => item.itemName && item.itemName.toLowerCase().includes(query))) ||
+      String(sale.orderNumber || '').includes(query)
+    );
+  });
+
+  const dndTotalParcels = dndRangeFiltered.length;
+  const dndTotalAmount = dndRangeFiltered.reduce((sum, sale) => sum + (Number(sale.totalAmount) || 0), 0);
+  const dndTotalSuits = dndRangeFiltered.reduce((sum, sale) => sum + (Number(sale.totalQty) || 0), 0);
+  const dndPaidCount = dndRangeFiltered.filter(sale => (sale.cod_paid || sale.codPaid || 'No') === 'Yes').length;
+  const dndPendingCount = dndTotalParcels - dndPaidCount;
+
+  const dndCityMap = {};
+  dndRangeFiltered.forEach(sale => {
+    const rawCity = (sale.city || '').trim();
+    const cityName = rawCity || 'Unknown City';
+
+    if (!dndCityMap[cityName]) {
+      dndCityMap[cityName] = { city: cityName, parcels: 0, suits: 0, amount: 0 };
+    }
+
+    dndCityMap[cityName].parcels += 1;
+    dndCityMap[cityName].suits += Number(sale.totalQty) || 0;
+    dndCityMap[cityName].amount += Number(sale.totalAmount) || 0;
+  });
+
+  const dndCityStats = Object.values(dndCityMap).sort((a, b) => {
+    if (b.parcels !== a.parcels) return b.parcels - a.parcels;
+    return b.amount - a.amount;
+  });
+
+  const dndTopCity = dndCityStats.length > 0 ? dndCityStats[0] : null;
+
   // SALES HISTORY CALCULATIONS
   const salesHistoryFiltered = sales.filter(s => {
     if (historyFilterType === 'Month') {
@@ -1236,6 +1303,12 @@ export default function App() {
       
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" style={{ display: 'none' }} />
 
+      <datalist id="design-name-suggestions">
+        {designSuggestions.map((designName) => (
+          <option key={designName} value={designName} />
+        ))}
+      </datalist>
+
       {/* LEFT SIDEBAR */}
       {isSidebarOpen && (
         <button
@@ -1258,6 +1331,7 @@ export default function App() {
             { name: 'Analytics', id: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
             { name: 'Customer Orders', id: 'Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
             { name: 'PostEx COD Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
+            { name: 'D&D Parcels', id: 'D&D Parcels', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10' },
             { name: 'Pending Payments', id: 'Pending Payments', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
             { name: 'Khata', id: 'Khata', icon: 'M3 10h18M5 10V21M19 10V21M4 21h16M12 3l8 4H4l8-4zm-4 7v6m8-6v6' },
             { name: 'Sales History', id: 'Sales History', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
@@ -1311,7 +1385,13 @@ export default function App() {
             <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
               type="text" 
-              placeholder={activeTab === 'Khata' ? 'Search shop owners or designs...' : 'Search orders, customers, or cities...'}
+              placeholder={
+                activeTab === 'Khata'
+                  ? 'Search shop owners or designs...'
+                  : activeTab === 'D&D Parcels'
+                    ? 'Search D&D parcels by customer, city, design or order...'
+                    : 'Search orders, customers, or cities...'
+              }
               value={activeTab === 'Khata' ? khataSearchTerm : searchTerm}
               onChange={(e) => activeTab === 'Khata' ? setKhataSearchTerm(e.target.value) : setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-purple-600 outline-none"
@@ -1471,6 +1551,169 @@ export default function App() {
 
           {activeTab === 'Orders' && <div className="space-y-4">{renderOrdersTable(filteredSales)}</div>}
           {activeTab === 'PostEx Orders' && <div className="space-y-4">{renderOrdersTable(filteredSales)}</div>}
+          
+          {/* D&D PARCELS TAB */}
+          {activeTab === 'D&D Parcels' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total D&D Parcels</p>
+                  <p className="text-3xl font-black text-gray-900 mt-2">{dndTotalParcels}</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {appliedRange ? 'In selected date range' : 'All-time D&D history'}
+                  </p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total D&D Amount</p>
+                  <p className="text-3xl font-black text-gray-900 mt-2">PKR {dndTotalAmount.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-2">{dndTotalSuits.toLocaleString()} suits in these parcels</p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Top D&D City</p>
+                  <p className="text-2xl font-black text-purple-700 mt-2 break-words">{dndTopCity?.city || 'No data'}</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {dndTopCity ? `${dndTopCity.parcels} parcels • PKR ${dndTopCity.amount.toLocaleString()}` : 'No D&D parcels found'}
+                  </p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Status</p>
+                  <div className="flex items-end gap-4 mt-2">
+                    <div>
+                      <p className="text-2xl font-black text-green-600">{dndPaidCount}</p>
+                      <p className="text-xs text-gray-500">Paid</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-black text-red-600">{dndPendingCount}</p>
+                      <p className="text-xs text-gray-500">Pending</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">D&D City Breakdown</h3>
+                    <p className="text-xs text-gray-500 mt-1">Cities ranked by number of D&D parcels sent.</p>
+                  </div>
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-full">
+                    {dndCityStats.length} Cities
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[650px] text-left">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
+                        <th className="py-3 px-5">Rank</th>
+                        <th className="py-3 px-5">City</th>
+                        <th className="py-3 px-5 text-right">Parcels</th>
+                        <th className="py-3 px-5 text-right">Suits</th>
+                        <th className="py-3 px-5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {dndCityStats.length > 0 ? dndCityStats.map((city, index) => (
+                        <tr key={city.city} className="border-b border-gray-50 hover:bg-gray-50/70">
+                          <td className="py-3 px-5 font-semibold text-gray-500">#{index + 1}</td>
+                          <td className="py-3 px-5 font-bold text-gray-900">{city.city}</td>
+                          <td className="py-3 px-5 text-right font-bold text-purple-700">{city.parcels}</td>
+                          <td className="py-3 px-5 text-right font-medium text-gray-700">{city.suits}</td>
+                          <td className="py-3 px-5 text-right font-bold text-gray-900">PKR {city.amount.toLocaleString()}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="5" className="py-8 text-center text-gray-400">No D&D city data found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Complete D&D Parcel History
+                    <span className="ml-2 text-sm font-semibold text-gray-400">({dndDisplayedParcels.length})</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {appliedRange
+                      ? `${formatReadableDate(appliedRange.start)} to ${formatReadableDate(appliedRange.end)}`
+                      : 'Showing all old and new D&D parcels saved in Online Sales'}
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] text-left">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 bg-gray-50/50">
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Customer</th>
+                        <th className="py-3 px-4">City</th>
+                        <th className="py-3 px-4">Designs</th>
+                        <th className="py-3 px-4 text-right">Qty</th>
+                        <th className="py-3 px-4 text-right">Amount</th>
+                        <th className="py-3 px-4 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {dndDisplayedParcels.length > 0 ? dndDisplayedParcels.map(sale => {
+                        const isPaid = (sale.cod_paid || sale.codPaid || 'No') === 'Yes';
+                        return (
+                          <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/70">
+                            <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
+                              <span className="font-medium">{sale.displayDate || sale.dateStr || '-'}</span>
+                              {sale.displayTime && <span className="block text-[11px] text-gray-400 mt-0.5">{sale.displayTime}</span>}
+                            </td>
+                            <td className="py-3 px-4">
+                              <button
+                                type="button"
+                                onClick={() => setDetailsModalSale(sale)}
+                                className="font-bold text-gray-900 hover:text-purple-600 text-left"
+                              >
+                                {sale.customerName || 'Unknown'}
+                              </button>
+                              <span className="block text-[11px] text-gray-400 mt-0.5">Order #{sale.orderNumber || '-'}</span>
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-gray-800">{sale.city || 'Unknown City'}</td>
+                            <td className="py-3 px-4">
+                              <div className="space-y-1">
+                                {(sale.items || []).map((item, index) => (
+                                  <div key={index} className="text-xs">
+                                    <span className="font-bold text-blue-600">{item.itemName}</span>
+                                    <span className="text-gray-400 ml-1">× {item.itemTotalQty || 0}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-gray-900">{Number(sale.totalQty) || 0}</td>
+                            <td className="py-3 px-4 text-right font-black text-gray-900">PKR {(Number(sale.totalAmount) || 0).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-right">
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+                                isPaid ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                              }`}>
+                                {isPaid ? 'Paid' : 'Unpaid'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr>
+                          <td colSpan="7" className="py-10 text-center text-gray-400">
+                            No D&D parcels found for this view.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* SALES HISTORY TAB */}
           {activeTab === 'Sales History' && (
@@ -2026,7 +2269,7 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Design Name <span className="text-red-500">*</span></label>
-                        <input type="text" required value={item.itemName} onChange={(e) => handleItemFieldChange(item.id, 'itemName', e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder={`Design ${index + 1}`} />
+                        <input type="text" list="design-name-suggestions" autoComplete="off" required value={item.itemName} onChange={(e) => handleItemFieldChange(item.id, 'itemName', e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder={`Design ${index + 1}`} />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (PKR) <span className="text-red-500">*</span></label>
@@ -2210,6 +2453,8 @@ export default function App() {
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Design Name</label>
                         <input
                           type="text"
+                          list="design-name-suggestions"
+                          autoComplete="off"
                           required
                           value={item.designName}
                           onChange={(e) => handleKhataDesignChange(item.id, 'designName', e.target.value)}
