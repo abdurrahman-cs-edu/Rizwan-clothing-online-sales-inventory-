@@ -1,6 +1,8 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import DesignsPanel from './DesignsPanel';
+import DesignPicker from './DesignPicker';
 
 export default function App() {
   // Server-verified 4-digit action PIN
@@ -931,6 +933,38 @@ export default function App() {
     }
   };
 
+  // Step 13b: Save-button lock, so a double-click cannot save the same order/Khata twice.
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [isSavingKhata, setIsSavingKhata] = useState(false);
+  const savingOrderRef = useRef(false);
+  const savingKhataRef = useRef(false);
+
+  const handleSubmitLocked = async (e) => {
+    e.preventDefault();
+    if (savingOrderRef.current) return;
+    savingOrderRef.current = true;
+    setIsSavingOrder(true);
+    try {
+      await handleSubmit(e);
+    } finally {
+      savingOrderRef.current = false;
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleSubmitKhataLocked = async (e) => {
+    e.preventDefault();
+    if (savingKhataRef.current) return;
+    savingKhataRef.current = true;
+    setIsSavingKhata(true);
+    try {
+      await handleSubmitKhata(e);
+    } finally {
+      savingKhataRef.current = false;
+      setIsSavingKhata(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     const pin = await requestActionPin('delete this online order');
     if (!pin) return;
@@ -1505,7 +1539,8 @@ export default function App() {
             { name: 'Khata', id: 'Khata', icon: 'M3 10h18M5 10V21M19 10V21M4 21h16M12 3l8 4H4l8-4zm-4 7v6m8-6v6' },
             { name: 'Sales History', id: 'Sales History', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
             { name: 'Top Selling Designs', id: 'Top Selling Designs', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
-            { name: 'Items Sold', id: 'Items Sold', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' }
+            { name: 'Items Sold', id: 'Items Sold', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+            { name: 'Designs', id: 'Designs', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' }
           ].map((item) => (
             <button
               key={item.id}
@@ -2159,6 +2194,8 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'Designs' && <DesignsPanel requestActionPin={requestActionPin} />}
+
           {activeTab === 'Top Selling Designs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
@@ -2240,7 +2277,7 @@ export default function App() {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
+            <form onSubmit={handleSubmitLocked} className="p-4 sm:p-6 space-y-6">
               
               <div className="space-y-4 bg-gray-50/50 p-5 rounded-xl border border-gray-100">
                 <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Customer Details</h3>
@@ -2320,7 +2357,13 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Design Name <span className="text-red-500">*</span></label>
-                        <input type="text" list="design-name-suggestions" autoComplete="off" required value={item.itemName} onChange={(e) => handleItemFieldChange(item.id, 'itemName', e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder={`Design ${index + 1}`} />
+                        <DesignPicker
+                          value={item.itemName}
+                          onType={(text) => handleItemFieldChange(item.id, 'itemName', text)}
+                          onSelect={(design) => setOrderItems(prev => prev.map(it => it.id === item.id ? { ...it, itemName: design.name, price: design.price != null ? String(design.price) : it.price } : it))}
+                          className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow"
+                          placeholder="Type to search designs"
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (PKR) <span className="text-red-500">*</span></label>
@@ -2354,8 +2397,8 @@ export default function App() {
                 <button type="button" onClick={closeSaleModal} className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
-                  {editingId ? 'Update Order' : 'Save Order'}
+                <button type="submit" disabled={isSavingOrder} className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors disabled:opacity-60 disabled:cursor-wait">
+                  {isSavingOrder ? 'Saving...' : editingId ? 'Update Order' : 'Save Order'}
                 </button>
               </div>
             </form>
@@ -2700,7 +2743,7 @@ export default function App() {
             )}
 
             {(editingKhataId || khataModalStep === 'purchase') && (
-              <form onSubmit={handleSubmitKhata} className="p-5 space-y-5 overflow-y-auto max-h-[78vh]">
+              <form onSubmit={handleSubmitKhataLocked} className="p-5 space-y-5 overflow-y-auto max-h-[78vh]">
                 <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-purple-500">Customer</p>
@@ -2763,15 +2806,12 @@ export default function App() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-normal text-gray-700 mb-1.5">Design Name</label>
-                          <input
-                            type="text"
-                            list="design-name-suggestions"
-                            autoComplete="off"
-                            required
+                          <DesignPicker
                             value={item.designName}
-                            onChange={(e) => handleKhataDesignChange(item.id, 'designName', e.target.value)}
+                            onType={(text) => handleKhataDesignChange(item.id, 'designName', text)}
+                            onSelect={(design) => setKhataDesignItems(prev => prev.map(it => it.id === item.id ? { ...it, designName: design.name, price: design.price != null ? String(design.price) : it.price } : it))}
                             className="w-full px-3 py-2.5 bg-white text-sm text-gray-700 border border-gray-300 rounded-md shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
-                            placeholder="Black Embroidered Suit"
+                            placeholder="Type to search designs"
                           />
                         </div>
 
@@ -2897,9 +2937,10 @@ export default function App() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg shadow-sm"
+                    disabled={isSavingKhata}
+                    className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg shadow-sm disabled:opacity-60 disabled:cursor-wait"
                   >
-                    {editingKhataId ? 'Update Purchase' : 'Save Purchase'}
+                    {isSavingKhata ? 'Saving...' : editingKhataId ? 'Update Purchase' : 'Save Purchase'}
                   </button>
                 </div>
               </form>
