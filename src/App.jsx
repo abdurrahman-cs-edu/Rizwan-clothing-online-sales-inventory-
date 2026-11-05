@@ -295,6 +295,41 @@ export default function App() {
     fetchKhataData();
   }, []);
 
+  // Step 13c: map every old spelling (design_aliases) and every admin design name
+  // to the one real design name, so reports count "Zouq", "Zooq" and "Zauq" together.
+  // Old orders are NOT changed; this only affects how totals are grouped on screen.
+  const [designNameMap, setDesignNameMap] = useState({});
+
+  useEffect(() => {
+    const loadDesignNameMap = async () => {
+      const [designsRes, aliasesRes] = await Promise.all([
+        supabase.from('designs').select('id, name'),
+        supabase.from('design_aliases').select('alias_name, design_id')
+      ]);
+      if (designsRes.error || aliasesRes.error) {
+        console.error('Error loading design names:', designsRes.error || aliasesRes.error);
+        return;
+      }
+      const key = (v) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      const byId = {};
+      const map = {};
+      (designsRes.data || []).forEach(d => {
+        byId[d.id] = d.name;
+        map[key(d.name)] = d.name;
+      });
+      (aliasesRes.data || []).forEach(a => {
+        if (byId[a.design_id]) map[key(a.alias_name)] = byId[a.design_id];
+      });
+      setDesignNameMap(map);
+    };
+    loadDesignNameMap();
+  }, []);
+
+  const canonicalDesignName = (name) => {
+    const k = String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    return designNameMap[k] || name;
+  };
+
   const fetchSalesData = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -1249,7 +1284,8 @@ export default function App() {
   const historyDesignCounts = {};
   salesHistoryFiltered.forEach(sale => {
     if (sale.items) sale.items.forEach(it => {
-      historyDesignCounts[it.itemName] = (historyDesignCounts[it.itemName] || 0) + (it.itemTotalQty || 0);
+      const designKey = canonicalDesignName(it.itemName);
+      historyDesignCounts[designKey] = (historyDesignCounts[designKey] || 0) + (it.itemTotalQty || 0);
     });
   });
   const historyTopDesigns = Object.entries(historyDesignCounts).sort((a, b) => b[1] - a[1]);
@@ -1306,7 +1342,8 @@ export default function App() {
   const designCounts = {};
   filteredSales.forEach(sale => {
     if (sale.items) sale.items.forEach(it => {
-      designCounts[it.itemName] = (designCounts[it.itemName] || 0) + (it.itemTotalQty || 0);
+      const designKey = canonicalDesignName(it.itemName);
+      designCounts[designKey] = (designCounts[designKey] || 0) + (it.itemTotalQty || 0);
     });
   });
   const topDesigns = Object.entries(designCounts).sort((a, b) => b[1] - a[1]);
