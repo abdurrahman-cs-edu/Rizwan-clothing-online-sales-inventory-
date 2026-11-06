@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import DesignsPanel from './DesignsPanel';
 import DesignPicker from './DesignPicker';
+import AnalyticsPanel from './AnalyticsPanel';
+import DashboardHome from './DashboardHome';
 
 export default function App() {
   // Server-verified 4-digit action PIN
@@ -269,7 +271,7 @@ export default function App() {
   const [khataNote, setKhataNote] = useState('');
   const [khataProfileOwner, setKhataProfileOwner] = useState(null);
   const [khataDesignItems, setKhataDesignItems] = useState([
-    { id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
+    { id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
   ]);
   const [khataPaid, setKhataPaid] = useState('No');
   const [khataPaymentType, setKhataPaymentType] = useState('Cash');
@@ -285,7 +287,7 @@ export default function App() {
   const [city, setCity] = useState(''); // Added city state
   
   const [orderItems, setOrderItems] = useState([
-    { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
+    { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
   ]);
   
   const fileInputRef = useRef(null);
@@ -383,7 +385,7 @@ export default function App() {
     setKhataOwnerSearch('');
     setKhataNewCustomerConfirmed(false);
     setKhataNote('');
-    setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+    setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
     setKhataPaid('No');
     setKhataPaymentType('Cash');
     setIsKhataModalOpen(true);
@@ -400,7 +402,7 @@ export default function App() {
     setKhataOwnerSearch(ownerName);
     setKhataNewCustomerConfirmed(true);
     setKhataNote('');
-    setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+    setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
     setKhataPaid('No');
     setKhataPaymentType('Cash');
     setKhataProfileOwner(null);
@@ -425,9 +427,10 @@ export default function App() {
           S: Number(entry.size_qty.S) || 0,
           M: Number(entry.size_qty.M) || 0,
           L: Number(entry.size_qty.L) || 0,
-          XL: Number(entry.size_qty.XL) || 0
+          XL: Number(entry.size_qty.XL) || 0,
+          XXL: Number(entry.size_qty.XXL) || 0
         }
-      : { S: 0, M: 0, L: 0, XL: 0 };
+      : { S: 0, M: 0, L: 0, XL: 0, XXL: 0 };
 
     const savedQty = Object.values(savedSizeQty).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
     const fallbackPrice = savedQty > 0 ? (Number(entry.amount) || 0) / savedQty : (Number(entry.amount) || 0);
@@ -436,7 +439,7 @@ export default function App() {
       id: Date.now(),
       designName: entry.design_name || '',
       price: String(entry.unit_price ?? fallbackPrice ?? ''),
-      sizeQty: savedQty > 0 ? savedSizeQty : { S: 1, M: 0, L: 0, XL: 0 }
+      sizeQty: savedQty > 0 ? savedSizeQty : { S: 1, M: 0, L: 0, XL: 0, XXL: 0 }
     }]);
     setKhataPaid(entry.paid ? 'Yes' : 'No');
     setKhataPaymentType(entry.payment_method || 'Cash');
@@ -482,7 +485,7 @@ export default function App() {
   const handleAddKhataDesign = () => {
     setKhataDesignItems(prev => [
       ...prev,
-      { id: Date.now() + Math.floor(Math.random() * 1000), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }
+      { id: Date.now() + Math.floor(Math.random() * 1000), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
     ]);
   };
 
@@ -522,7 +525,8 @@ export default function App() {
         S: Number(item.sizeQty?.S) || 0,
         M: Number(item.sizeQty?.M) || 0,
         L: Number(item.sizeQty?.L) || 0,
-        XL: Number(item.sizeQty?.XL) || 0
+        XL: Number(item.sizeQty?.XL) || 0,
+        XXL: Number(item.sizeQty?.XXL) || 0
       };
       const quantity = Object.values(sizeQty).reduce((sum, qty) => sum + qty, 0);
       const unitPrice = parseFloat(item.price);
@@ -597,7 +601,7 @@ export default function App() {
       setEditingKhataId(null);
       setPendingActionPin('');
       setKhataNote('');
-      setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+      setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
       await fetchKhataData();
       setKhataProfileOwner(ownerName);
     } catch (error) {
@@ -634,6 +638,15 @@ export default function App() {
       return;
     }
     setAppliedRange({ start: startDate, end: endDate });
+  };
+
+  // Used by the Dashboard cards: open the Orders tab filtered to a date range.
+  const showOrdersInRange = (start, end) => {
+    setStartDate(start);
+    setEndDate(end);
+    setAppliedRange({ start, end });
+    setSearchTerm('');
+    setActiveTab('Orders');
   };
 
   const handleResetDateFilter = () => {
@@ -688,7 +701,8 @@ export default function App() {
                 S: Number(it.sizeQty?.S) || 0,
                 M: Number(it.sizeQty?.M) || 0,
                 L: Number(it.sizeQty?.L) || 0,
-                XL: Number(it.sizeQty?.XL) || 0
+                XL: Number(it.sizeQty?.XL) || 0,
+                XXL: Number(it.sizeQty?.XXL) || 0
               };
               const q = Object.values(sizeQty).reduce((a, b) => a + b, 0);
               const p = parseFloat(it.price || 0);
@@ -701,12 +715,13 @@ export default function App() {
               };
             });
           } else {
-            const sizes = item.sizes || { S: 0, M: 0, L: 0, XL: 0 };
+            const sizes = item.sizes || { S: 0, M: 0, L: 0, XL: 0, XXL: 0 };
             const sizeQty = {
               S: Number(sizes.S) || 0,
               M: Number(sizes.M) || 0,
               L: Number(sizes.L) || 0,
-              XL: Number(sizes.XL) || 0
+              XL: Number(sizes.XL) || 0,
+              XXL: Number(sizes.XXL) || 0
             };
             const price = parseFloat(item.price || 0);
             const q = Object.values(sizeQty).reduce((a, b) => a + b, 0);
@@ -778,7 +793,7 @@ export default function App() {
   };
 
   const handleAddAnotherDesign = () => {
-    setOrderItems(prev => [...prev, { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+    setOrderItems(prev => [...prev, { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
   };
 
   const handleRemoveDesignItem = (itemId) => {
@@ -821,7 +836,7 @@ export default function App() {
     setLocalRiderSubOption('D&D');
     setOrderCode('');
     setCity('');
-    setOrderItems([{ id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+    setOrderItems([{ id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
     setIsModalOpen(true);
   };
 
@@ -843,10 +858,10 @@ export default function App() {
         id: Date.now() + idx,
         itemName: it.itemName,
         price: it.price?.toString() || '',
-        sizeQty: { S: Number(it.sizeQty?.S) || 0, M: Number(it.sizeQty?.M) || 0, L: Number(it.sizeQty?.L) || 0, XL: Number(it.sizeQty?.XL) || 0 }
+        sizeQty: { S: Number(it.sizeQty?.S) || 0, M: Number(it.sizeQty?.M) || 0, L: Number(it.sizeQty?.L) || 0, XL: Number(it.sizeQty?.XL) || 0, XXL: Number(it.sizeQty?.XXL) || 0 }
       })));
     } else {
-      setOrderItems([{ id: Date.now(), itemName: sale.itemName || '', price: sale.price?.toString() || '', sizeQty: { ...sale.sizeQty } }]);
+      setOrderItems([{ id: Date.now(), itemName: sale.itemName || '', price: sale.price?.toString() || '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0, ...sale.sizeQty } }]);
     }
     setIsModalOpen(true);
   };
@@ -888,6 +903,7 @@ export default function App() {
 
     if (isPostEx && !orderCode.trim()) return alert('Please enter an order code for PostEx.');
     if (isLocalRider && !city.trim()) return alert('Please enter a city for the Local Rider.');
+    if (isPostEx && !city.trim()) return alert('Please enter a city for PostEx.');
 
     let totalQty = 0;
     let totalAmount = 0;
@@ -918,7 +934,7 @@ export default function App() {
           cod_sub_option: isCod ? codSubOption : '',
           local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
-          city: isLocalRider ? toTitleCase(city.trim()) : '',
+          city: (isLocalRider || isPostEx) ? toTitleCase(city.trim()) : '',
           cod_paid: isCod ? (existingSale?.cod_paid || 'No') : 'No',
           cod_payment_type: isCod ? (existingSale?.cod_payment_type || 'Cash') : 'Cash',
           cod_paid_at: isCod ? (existingSale?.cod_paid_at || null) : null,
@@ -943,7 +959,7 @@ export default function App() {
           cod_sub_option: isCod ? codSubOption : '',
           local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
           orderCode: isPostEx ? orderCode.trim() : '',
-          city: isLocalRider ? toTitleCase(city.trim()) : '',
+          city: (isLocalRider || isPostEx) ? toTitleCase(city.trim()) : '',
           cod_paid: 'No',
           cod_payment_type: 'Cash',
           cod_paid_at: null,
@@ -1479,7 +1495,19 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-screen bg-[#F8F9FB] font-sans text-gray-800">
+    <div className="flex h-screen bg-[#f5f6fb] font-sans text-gray-800">
+      <style>{`
+        .sidebar-scroll { scrollbar-width: thin; scrollbar-color: #3b3f6b transparent; }
+        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #3b3f6b; border-radius: 9999px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #6d63f5; }
+        .app-scroll { scrollbar-width: thin; scrollbar-color: #c9c3fb transparent; }
+        .app-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .app-scroll::-webkit-scrollbar-track { background: transparent; }
+        .app-scroll::-webkit-scrollbar-thumb { background: #d6d2fb; border-radius: 9999px; }
+        .app-scroll::-webkit-scrollbar-thumb:hover { background: #a99ff7; }
+      `}</style>
       {pinModal.open && (
         <div className="fixed inset-0 z-[100] bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
@@ -1559,16 +1587,23 @@ export default function App() {
         />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 z-40 transform transition-transform duration-200 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:z-10 md:translate-x-0`}>
-        <div className="h-20 flex items-center px-6 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">R</div>
-            <span className="text-sm font-bold text-gray-900 tracking-tight leading-snug">Rizwan clothing online sales Inventory</span>
+      {/* Desktop: keeps a 80px space for the collapsed sidebar rail */}
+      <div className="hidden md:block w-20 shrink-0" aria-hidden="true" />
+
+      <aside className={`group fixed inset-y-0 left-0 z-40 w-64 md:w-20 md:hover:w-64 bg-[#0e1330] text-slate-300 flex flex-col overflow-hidden transition-all duration-200 ease-in-out md:hover:shadow-2xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="h-20 flex items-center px-5 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-900/40">R</div>
+            <div className="leading-tight whitespace-nowrap md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+              <span className="block text-sm font-bold tracking-[0.2em] text-white">RIZWAN</span>
+              <span className="block text-xs font-medium tracking-[0.25em] text-slate-400">CLOTHING</span>
+            </div>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden py-5 px-3 space-y-1">
           {[
-            { name: 'Analytics', id: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+            { name: 'Dashboard', id: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+            { name: 'Charts & Reports', id: 'Charts', icon: 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055zM20.488 9H15V3.512A9.025 9.025 0 0120.488 9z' },
             { name: 'Customer Orders', id: 'Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
             { name: 'PostEx COD Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
             { name: 'D&D Parcels', id: 'D&D Parcels', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10' },
@@ -1585,32 +1620,41 @@ export default function App() {
                 setActiveTab(item.id);
                 setIsSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                activeTab === item.id 
-                  ? 'bg-purple-50 text-purple-700 font-semibold relative after:absolute after:left-0 after:top-2 after:bottom-2 after:w-1 after:bg-purple-600 after:rounded-r-full' 
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'
+              title={item.name}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all ${
+                activeTab === item.id
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold shadow-lg shadow-indigo-900/40'
+                  : 'text-slate-300 hover:bg-white/5 hover:text-white font-medium'
               }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
-              <span>{item.name}</span>
+              <span className="relative shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
+                {((item.id === 'Pending Payments' && globalPendingCount > 0) || (item.id === 'Khata' && khataPendingOwners > 0)) && (
+                  <span className="hidden md:block md:group-hover:hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-[#0e1330]" />
+                )}
+              </span>
+              <span className="whitespace-nowrap md:opacity-0 md:group-hover:opacity-100 transition-opacity">{item.name}</span>
               {item.id === 'Pending Payments' && globalPendingCount > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100">
                   {globalPendingCount}
                 </span>
               )}
               {item.id === 'Khata' && khataPendingOwners > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100">
                   {khataPendingOwners}
                 </span>
               )}
             </button>
           ))}
         </nav>
+        <div className="px-6 py-4 border-t border-white/10 text-[11px] text-slate-500 whitespace-nowrap md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+          © {new Date().getFullYear()} Rizwan Clothing
+        </div>
       </aside>
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col overflow-hidden w-full min-w-0">
-        <header className="min-h-20 bg-white border-b border-gray-100 flex items-center justify-between gap-3 px-4 sm:px-6 md:px-8 py-3 z-10 shrink-0">
+        <header className="min-h-20 bg-white/80 backdrop-blur border-b border-gray-200/70 flex items-center justify-between gap-3 px-4 sm:px-6 md:px-8 py-3 z-10 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <button
               type="button"
@@ -1635,28 +1679,31 @@ export default function App() {
               }
               value={activeTab === 'Khata' ? khataSearchTerm : searchTerm}
               onChange={(e) => activeTab === 'Khata' ? setKhataSearchTerm(e.target.value) : setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-purple-600 outline-none"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-100/80 border border-transparent rounded-xl text-sm focus:bg-white focus:border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none"
             />
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-6 ml-4">
             <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
-              <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold">AR</div>
-              <span className="font-semibold text-sm hidden sm:block">Abdur Rahman</span>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm">AR</div>
+              <span className="hidden sm:block leading-tight">
+                <span className="block font-semibold text-sm text-gray-900">Abdur Rahman</span>
+                <span className="block text-xs text-gray-500">Admin</span>
+              </span>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8">
+        <div className="app-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8">
           
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{activeTab === 'Dashboard' ? 'Morning, Abdur!' : activeTab}</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? 'Welcome back, Abdur!' : activeTab}</h1>
               <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? "Here's what's happening with your store today." : `Manage your ${activeTab.toLowerCase()} data.`}</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && activeTab !== 'Khata' && (
+              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && activeTab !== 'Khata' && activeTab !== 'Charts' && (
                 <div className="w-full xl:w-auto flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">From</span>
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm border-none outline-none text-gray-700 bg-transparent cursor-pointer font-medium flex-1 min-w-[130px]" />
@@ -1708,85 +1755,13 @@ export default function App() {
 
           {activeTab === 'Dashboard' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-50/90 p-6 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 mb-4">
-                    <div className="p-1.5 bg-green-100 text-green-700 rounded-md">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                    {revenueLabel}
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">PKR {displayRevenue.toLocaleString()}</h2>
-                    <p className="text-sm font-medium text-green-600 mt-2">{revenueSubtext}</p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/90 p-6 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 mb-4">
-                    <div className="p-1.5 bg-blue-100 text-blue-700 rounded-md">
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012-2h-2a2 2 0 01-2-2z"></path></svg>
-                    </div>
-                    {appliedRange ? 'Selected Period Sales' : "Today's Sales"}
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">
-                      PKR {(appliedRange ? displayRevenue : todaysRevenue).toLocaleString()}
-                    </h2>
-                    <p className="text-sm font-medium text-blue-600 mt-2">
-                      {appliedRange ? `${displayOrdersCount} orders in range` : `${todaysSales.length} orders today`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/90 p-6 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 mb-4">
-                     <div className="p-1.5 bg-purple-100 text-purple-700 rounded-md">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-                     </div>
-                     Items Sold
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">{displayItemsSold}</h2>
-                    <p className="text-sm font-medium text-gray-500 mt-2">
-                      {appliedRange ? 'In selected date range' : `Total volume in ${currentMonthName}`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/90 p-6 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-600 mb-4">
-                     <div className="p-1.5 bg-orange-100 text-orange-700 rounded-md">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                     </div>
-                     Total Orders
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">{displayOrdersCount}</h2>
-                    <p className="text-sm font-medium text-gray-500 mt-2">
-                      {appliedRange ? 'Filtered orders logged' : `Orders logged in ${currentMonthName}`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Recent Orders {appliedRange 
-                      ? (appliedRange.start === appliedRange.end 
-                          ? `(${formatReadableDate(appliedRange.start)})` 
-                          : `(${formatReadableDate(appliedRange.start)} to ${formatReadableDate(appliedRange.end)})`)
-                      : `(${currentMonthName})`}
-                  </h3>
-                  {appliedRange && (
-                    <span className="text-xs bg-purple-100 text-purple-700 font-bold px-2.5 py-1 rounded-md">
-                      Filtered View Active
-                    </span>
-                  )}
-                </div>
-                {renderOrdersTable(recentOrders)}
-              </div>
+              <DashboardHome
+                sales={sales}
+                canonicalDesignName={canonicalDesignName}
+                onOpenSale={setDetailsModalSale}
+                onGoTo={setActiveTab}
+                onShowOrders={showOrdersInRange}
+              />
             </div>
           )}
 
@@ -2233,6 +2208,8 @@ export default function App() {
 
           {activeTab === 'Designs' && <DesignsPanel requestActionPin={requestActionPin} />}
 
+          {activeTab === 'Charts' && <AnalyticsPanel />}
+
           {activeTab === 'Top Selling Designs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
@@ -2352,6 +2329,8 @@ export default function App() {
                       <div>
                         <label className="block text-sm font-medium text-purple-800 mb-1">PostEx Order Code <span className="text-red-500">*</span></label>
                         <input type="text" required value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. PX-12345" />
+                        <label className="block text-sm font-medium text-purple-800 mb-1 mt-4">City <span className="text-red-500">*</span></label>
+                        <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Enter city name" />
                       </div>
                     )}
 
@@ -2410,8 +2389,8 @@ export default function App() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Sizes & Quantities</label>
-                      <div className="grid grid-cols-2 sm:flex gap-3">
-                        {['S', 'M', 'L', 'XL'].map(sz => (
+                      <div className="grid grid-cols-3 sm:flex gap-3">
+                        {['S', 'M', 'L', 'XL', 'XXL'].map(sz => (
                           <div key={sz} className="flex-1 flex flex-col items-center bg-white border border-gray-200 rounded-lg p-2 focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-transparent transition-all">
                             <span className="text-xs font-bold text-gray-500 mb-1">{sz}</span>
                             <input 
@@ -2628,7 +2607,7 @@ export default function App() {
                         setKhataCustomerMode('old');
                         setKhataNewCustomerConfirmed(true);
                         setKhataNote('');
-                        setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+                        setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
                         setKhataPaid('No');
                         setKhataPaymentType('Cash');
                         setKhataModalStep('purchase');
@@ -2767,7 +2746,7 @@ export default function App() {
                       setKhataCustomerMode('new');
                       setKhataModalStep('purchase');
                       setKhataNote('');
-                      setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0 } }]);
+                      setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
                       setKhataPaid('No');
                       setKhataPaymentType('Cash');
                     }}
@@ -2869,8 +2848,8 @@ export default function App() {
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-2">Sizes & Quantity</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['S', 'M', 'L', 'XL'].map(size => (
+                        <div className="grid grid-cols-5 gap-2">
+                          {['S', 'M', 'L', 'XL', 'XXL'].map(size => (
                             <div key={size}>
                               <label className="block text-xs font-normal text-gray-600 text-center mb-1.5">{size}</label>
                               <input
@@ -3084,7 +3063,7 @@ export default function App() {
                                 </p>
 
                                 <div className="flex flex-wrap gap-1.5 mt-3">
-                                  {['S', 'M', 'L', 'XL'].map(sz => {
+                                  {['S', 'M', 'L', 'XL', 'XXL'].map(sz => {
                                     const qty = Number(entry.size_qty?.[sz]) || 0;
                                     return qty > 0 ? (
                                       <span key={sz} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-semibold">
