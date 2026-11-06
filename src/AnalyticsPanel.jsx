@@ -32,6 +32,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 const REPORTS = [
   ['sales', 'Sales'],
+  ['profit', 'Profit'],
   ['designs', 'Designs'],
   ['sizes', 'Sizes'],
   ['fabric', 'Fabric'],
@@ -190,7 +191,7 @@ export default function AnalyticsPanel() {
             'source_id, design_name, raw_name, customer, unit_price, qty, amount, payment_method, sale_date, qty_s, qty_m, qty_l, qty_xl, qty_xxl',
             (q) => q.eq('source', 'sale')),
           fetchAll('sales', 'id, dateStr, paymentMethod, cod_sub_option, local_rider_sub_option, city, orderCode, cod_paid, totalAmount, totalQty'),
-          supabase.from('designs').select('name, fabric, is_active'),
+          supabase.from('designs').select('name, fabric, cost, is_active'),
           supabase.from('postex_city_codes').select('prefix, city'),
         ]);
         if (designsRes.error) throw designsRes.error;
@@ -344,6 +345,36 @@ export default function AnalyticsPanel() {
       return titleCase(o.city) || pxCodes[prefix] || 'Unknown';
     });
 
+    // Profit (gross): sale amount - suits x design cost. Uses the CURRENT cost of each design.
+    const costOf = {};
+    designs.forEach(d => { if (d.cost != null && Number(d.cost) > 0) costOf[nameKey(d.name)] = Number(d.cost); });
+    const pMap = new Map();
+    let pRevenue = 0;
+    let pCost = 0;
+    let noCostSuits = 0;
+    let noCostAmount = 0;
+    L.forEach(l => {
+      const q = Number(l.qty) || 0;
+      const amount = Number(l.amount) || 0;
+      const c = costOf[nameKey(l.design_name)];
+      if (c == null) { noCostSuits += q; noCostAmount += amount; return; }
+      pRevenue += amount;
+      pCost += q * c;
+      const x = pMap.get(l.design_name) || { name: l.design_name, qty: 0, amount: 0, cost: 0, unitCost: c };
+      x.qty += q; x.amount += amount; x.cost += q * c; pMap.set(l.design_name, x);
+    });
+    const profitRows = Array.from(pMap.values()).map(x => ({
+      ...x,
+      profit: x.amount - x.cost,
+      margin: x.amount ? ((x.amount - x.cost) / x.amount) * 100 : 0,
+      avgPrice: x.qty ? x.amount / x.qty : 0,
+    }));
+    const mostProfitable = profitRows.slice().sort((a, b) => b.profit - a.profit).slice(0, 10);
+    const lossRows = profitRows.filter(x => x.profit < 0).sort((a, b) => a.profit - b.profit);
+    const lowMargin = profitRows.filter(x => x.profit >= 0 && x.margin < 15).sort((a, b) => a.margin - b.margin);
+    const costedDesigns = designs.filter(d => d.is_active && d.cost != null && Number(d.cost) > 0).length;
+    const activeDesigns = designs.filter(d => d.is_active).length;
+
     // Customers (names as typed; similar spellings are not merged yet)
     const cMap = new Map();
     orderMap.forEach(o => {
@@ -362,6 +393,9 @@ export default function AnalyticsPanel() {
       pay, codStatus, channel, riderCities, postexCities,
       customers: customers.slice(0, 15), customerCount: customers.length, repeat,
       unlinked: L.filter(l => !l.design_name).length,
+      pRevenue, pCost, pProfit: pRevenue - pCost, pMargin: pRevenue ? ((pRevenue - pCost) / pRevenue) * 100 : 0,
+      profitRows: profitRows.sort((a, b) => b.profit - a.profit), mostProfitable, lossRows, lowMargin,
+      noCostSuits, noCostAmount, costedDesigns, activeDesigns,
     };
   }, [lines, orders, designs, pxCodes, from, to, grain]);
 
@@ -445,6 +479,64 @@ export default function AnalyticsPanel() {
             </div>
           </Card>
         </>
+      )}
+
+      {report === 'profit' && (
+        r.costedDesigns === 0 ? (
+          <Card title="Profit report">
+            <Empty>No design costs yet. Open the Designs tab, click Edit on each design and enter its cost per suit. This report fills in automatically.</Empty>
+          </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Stat label="Sales (designs with cost)" value={pkr(r.pRevenue)} />
+              <Stat label="Cost of suits" value={pkr(r.pCost)} />
+              <Stat label="Gross profit" value={<span className={r.pProfit < 0 ? 'text-red-600' : 'text-green-700'}>{pkr(r.pProfit)}</span>} />
+              <Stat label="Profit margin" value={`${r.pMargin.toFixed(1)}%`} note="Gross profit ÷ sales" />
+            </div>
+
+            {(r.lossRows.length > 0 || r.lowMargin.length > 0) && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 space-y-2">
+                <p className="text-sm font-bold text-red-700">⚠ Profit warnings</p>
+                {r.lossRows.map(x => (
+                  <p key={x.name} className="text-sm text-red-700">
+                    <span className="font-semibold">{x.name}</span> made a loss of {pkr(-x.profit)} (average price {pkr(x.avgPrice)} vs cost {pkr(x.unitCost)}).
+                  </p>
+                ))}
+                {r.lowMargin.map(x => (
+                  <p key={x.name} className="text-sm text-amber-700">
+                    <span className="font-semibold">{x.name}</span> has a low margin of {x.margin.toFixed(0)}%.
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <Card title="Most profitable designs" subtitle="Top 10 by gross profit in this period.">
+                <RankBars rows={r.mostProfitable} valueKey="profit" color={C.aqua} labelFmt={kTick}
+                  tipLines={(x) => [['Gross profit', pkr(x.profit)], ['Margin', `${x.margin.toFixed(0)}%`], ['Suits', fmt(x.qty)]]} />
+              </Card>
+              <Card title="Profit by design" subtitle="Sales, cost and profit for every design that has a cost.">
+                <div className="max-h-[420px] overflow-y-auto">
+                  <SimpleTable rows={r.profitRows} columns={[
+                    ['Design', (x) => <span className="font-semibold text-gray-900">{x.name}</span>],
+                    ['Suits', (x) => fmt(x.qty), 'right'],
+                    ['Sales', (x) => fmt(x.amount), 'right'],
+                    ['Cost', (x) => fmt(x.cost), 'right'],
+                    ['Profit', (x) => <span className={`font-bold ${x.profit < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(x.profit)}</span>, 'right'],
+                    ['Margin', (x) => `${x.margin.toFixed(0)}%`, 'right'],
+                  ]} />
+                </div>
+              </Card>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Costs entered for {r.costedDesigns} of {r.activeDesigns} active designs.
+              {r.noCostSuits > 0 && ` ${fmt(r.noCostSuits)} suits (${pkr(r.noCostAmount)}) in this period are from designs without a cost and are not counted.`}
+              {' '}Profit uses each design's current cost for all sales, including older ones.
+            </p>
+          </>
+        )
       )}
 
       {report === 'designs' && (
@@ -571,7 +663,7 @@ export default function AnalyticsPanel() {
       {r.unlinked > 0 && (
         <p className="text-xs text-amber-700">{r.unlinked} order line(s) in this period are not linked to a design yet (shown as "unlinked").</p>
       )}
-      <p className="text-xs text-gray-400">Profit and cost reports will be added after the cost of each design is entered.</p>
+      <p className="text-xs text-gray-400">Profit is gross profit (sales minus suit cost). Expenses such as rent and salaries are not included.</p>
     </div>
   );
 }
