@@ -6,6 +6,7 @@ import DesignPicker from './DesignPicker';
 import AnalyticsPanel from './AnalyticsPanel';
 import DashboardHome from './DashboardHome';
 import './theme.css';
+import LoginScreen from './LoginScreen';
 
 // Delivery company of an order, for Advance and COD alike.
 // Stored in the existing columns: cod_sub_option ('PostEx' | 'Local Rider' | 'Shop Pickup')
@@ -37,7 +38,62 @@ function isRiderCodPending(sale) {
     && (sale?.cod_paid || sale?.codPaid || 'No') === 'No';
 }
 
+// ---------------------------------------------------------------------------
+// Login gate. Nothing (no sales, no Khata) loads until someone signs in.
+// Roles come from public.user_roles: 'admin' sees everything, 'staff' does not
+// see cost / profit (Charts & Reports, Designs).
+// ---------------------------------------------------------------------------
 export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = still checking
+  const [role, setRole] = useState(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s || null));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (!userId) { setRole(undefined); return; }
+    let cancelled = false;
+    supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error('Could not load role:', error);
+        setRole(data?.role || null);
+      });
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const signOut = async () => {
+    sessionStorage.removeItem('rizwan_action_pin_v2');
+    await supabase.auth.signOut();
+  };
+
+  if (session === undefined || (session && role === undefined)) {
+    return (
+      <div className="min-h-screen bg-[#f5f6fb] flex items-center justify-center text-sm text-gray-500 font-sans">Loading...</div>
+    );
+  }
+  if (!session) return <LoginScreen />;
+  if (!role) {
+    return (
+      <div className="min-h-screen bg-[#f5f6fb] flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-sm text-center">
+          <h1 className="text-lg font-bold text-gray-900">No access yet</h1>
+          <p className="text-sm text-gray-500 mt-2">This account ({session.user.email}) has no role. Ask the admin to add it.</p>
+          <button type="button" onClick={signOut} className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg">Sign out</button>
+        </div>
+      </div>
+    );
+  }
+  return <MainApp key={userId} user={session.user} role={role} onSignOut={signOut} />;
+}
+
+function MainApp({ user, role, onSignOut }) {
+  const isAdmin = role === 'admin';
+  const ADMIN_ONLY_TABS = ['Charts', 'Designs'];
   // Server-verified 4-digit action PIN
   const [pinModal, setPinModal] = useState({
     open: false,
@@ -268,6 +324,10 @@ export default function App() {
 
   // Navigation & Filter States
   const [activeTab, setActiveTab] = useState('Dashboard');
+  // Staff can never stay on an admin-only tab (e.g. via a dashboard link).
+  useEffect(() => {
+    if (!isAdmin && ADMIN_ONLY_TABS.includes(activeTab)) setActiveTab('Dashboard');
+  }, [isAdmin, activeTab]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingFilter, setPendingFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1661,7 +1721,7 @@ export default function App() {
             { name: 'Top Selling Designs', id: 'Top Selling Designs', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
             { name: 'Items Sold', id: 'Items Sold', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
             { name: 'Designs', id: 'Designs', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' }
-          ].map((item) => (
+          ].filter((item) => isAdmin || !ADMIN_ONLY_TABS.includes(item.id)).map((item) => (
             <button
               key={item.id}
               onClick={() => {
@@ -1746,20 +1806,29 @@ export default function App() {
           </button>
           <div className="hidden sm:flex items-center gap-6">
             <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm">AR</div>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm">{isAdmin ? 'AR' : 'ST'}</div>
               <span className="hidden sm:block leading-tight">
-                <span className="block font-semibold text-sm text-gray-900">Abdur Rahman</span>
-                <span className="block text-xs text-gray-500">Admin</span>
+                <span className="block font-semibold text-sm text-gray-900">{isAdmin ? 'Abdur Rahman' : 'Staff'}</span>
+                <span className="block text-xs text-gray-500">{isAdmin ? 'Admin' : 'Staff'} · {user?.email}</span>
               </span>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="w-10 h-10 shrink-0 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          </button>
         </header>
 
         <div className="app-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8">
           
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? 'Welcome back, Abdur!' : activeTab}</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? (isAdmin ? 'Welcome back, Abdur!' : 'Welcome back!') : activeTab}</h1>
               <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? `${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Here's what's happening with your store today.` : `Manage your ${activeTab.toLowerCase()} data.`}</p>
             </div>
             
@@ -2268,9 +2337,9 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'Designs' && <DesignsPanel requestActionPin={requestActionPin} />}
+          {activeTab === 'Designs' && isAdmin && <DesignsPanel requestActionPin={requestActionPin} />}
 
-          {activeTab === 'Charts' && <AnalyticsPanel />}
+          {activeTab === 'Charts' && isAdmin && <AnalyticsPanel />}
 
           {activeTab === 'Top Selling Designs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
