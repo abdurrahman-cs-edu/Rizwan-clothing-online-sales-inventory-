@@ -4,8 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>hisab-kitab</title>
+    <title>Rizwan Clothing</title>
+    <script>
+      // Apply the saved theme before the page paints (no white flash in dark mode).
+      try { if (localStorage.getItem('rc_theme') === 'dark') document.documentElement.classList.add('dark'); } catch (e) {}
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // One brand colour: every "purple-*" class in the app uses the brand violet (#5b4cf0 = purple-600).
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              purple: {
+                50: '#f3f2fe', 100: '#e8e5fd', 200: '#d3cdfb', 300: '#b3a9f8', 400: '#8f80f4',
+                500: '#7464f2', 600: '#5b4cf0', 700: '#4a3bd8', 800: '#3d31b0', 900: '#342b8c', 950: '#1e1952'
+              }
+            }
+          }
+        }
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>
