@@ -23,8 +23,9 @@ function editDistance(a, b) {
 }
 
 // Admin "Designs" panel.
-// Reads the designs table directly (public SELECT policy) and writes ONLY
-// through the PIN-protected Edge Function actions:
+// Reads the designs table directly (logged-in SELECT policy, cost column excluded)
+// and the cost through the admin-only function design_costs().
+// Writes go ONLY through the PIN-protected Edge Function actions:
 // insert_design, update_design, set_design_active.
 export default function DesignsPanel({ requestActionPin }) {
   const [designs, setDesigns] = useState([]);
@@ -43,16 +44,22 @@ export default function DesignsPanel({ requestActionPin }) {
 
   const fetchDesigns = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('designs')
-      .select('*')
-      .order('name', { ascending: true });
-    if (error) {
-      console.error('Error fetching designs:', error);
-      window.alert('Failed to load designs: ' + error.message);
+    const [designsRes, costRes] = await Promise.all([
+      supabase
+        .from('designs')
+        .select('id, name, fabric, price, image_path, is_active, created_at')
+        .order('name', { ascending: true }),
+      supabase.rpc('design_costs'),
+    ]);
+    if (designsRes.error) {
+      console.error('Error fetching designs:', designsRes.error);
+      window.alert('Failed to load designs: ' + designsRes.error.message);
       setDesigns([]);
     } else {
-      setDesigns(data || []);
+      if (costRes.error) console.error('Error fetching design costs:', costRes.error);
+      const costById = {};
+      (costRes.data || []).forEach((r) => { costById[r.id] = r.cost; });
+      setDesigns((designsRes.data || []).map((d) => ({ ...d, cost: costById[d.id] ?? null })));
     }
     setLoading(false);
   };

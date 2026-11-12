@@ -186,19 +186,24 @@ export default function AnalyticsPanel() {
     let alive = true;
     (async () => {
       try {
-        const [saleLines, orderRows, designsRes, pxRes] = await Promise.all([
+        const [saleLines, orderRows, designsRes, pxRes, costRes] = await Promise.all([
           fetchAll('design_lines',
             'source_id, design_name, raw_name, customer, unit_price, qty, amount, payment_method, sale_date, qty_s, qty_m, qty_l, qty_xl, qty_xxl',
             (q) => q.eq('source', 'sale')),
           fetchAll('sales', 'id, dateStr, paymentMethod, cod_sub_option, local_rider_sub_option, city, orderCode, cod_paid, totalAmount, totalQty'),
-          supabase.from('designs').select('name, fabric, cost, is_active'),
+          supabase.from('designs').select('id, name, fabric, is_active'),
           supabase.from('postex_city_codes').select('prefix, city'),
+          // Costs come from an admin-only function; staff cannot read the cost column.
+          supabase.rpc('design_costs'),
         ]);
         if (designsRes.error) throw designsRes.error;
+        if (costRes.error) console.error('Could not load design costs:', costRes.error);
+        const costById = {};
+        (costRes.data || []).forEach(r => { costById[r.id] = r.cost; });
         if (!alive) return;
         setLines(saleLines);
         setOrders(orderRows);
-        setDesigns(designsRes.data || []);
+        setDesigns((designsRes.data || []).map(d => ({ ...d, cost: costById[d.id] ?? null })));
         const px = {};
         (pxRes.data || []).forEach(r => { px[String(r.prefix || '').trim().toUpperCase()] = r.city; });
         setPxCodes(px);
