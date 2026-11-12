@@ -320,15 +320,19 @@ export default function AnalyticsPanel() {
       { name: 'Advance', value: O.filter(o => !isCod(o)).length },
       { name: 'COD', value: O.filter(isCod).length },
     ];
-    const codRows = O.filter(isCod);
+    // Only Local Rider COD is collected by us; PostEx pays into our own account.
+    const codRows = O.filter(o => isCod(o) && o.cod_sub_option === 'Local Rider');
     const codStatus = [
       { name: 'Paid', value: codRows.filter(o => (o.cod_paid || 'No') === 'Yes').length },
       { name: 'Unpaid', value: codRows.filter(o => (o.cod_paid || 'No') !== 'Yes').length },
     ];
+    // Delivery company for every order (Advance and COD). Old Advance orders have none.
     const channel = [
-      { name: 'PostEx', value: codRows.filter(o => o.cod_sub_option === 'PostEx').length },
-      { name: 'D&D', value: codRows.filter(o => o.cod_sub_option === 'Local Rider' && (o.local_rider_sub_option || 'D&D') === 'D&D').length },
-      { name: 'Service Delivery', value: codRows.filter(o => o.cod_sub_option === 'Local Rider' && o.local_rider_sub_option === 'Service Delivery').length },
+      { name: 'PostEx', value: O.filter(o => o.cod_sub_option === 'PostEx').length },
+      { name: 'D&D', value: O.filter(o => o.cod_sub_option === 'Local Rider' && (o.local_rider_sub_option || 'D&D') !== 'Service Delivery').length },
+      { name: 'Service Delivery', value: O.filter(o => o.cod_sub_option === 'Local Rider' && o.local_rider_sub_option === 'Service Delivery').length },
+      { name: 'Shop Pickup', value: O.filter(o => o.cod_sub_option === 'Shop Pickup').length },
+      { name: 'Not recorded', value: O.filter(o => !['PostEx', 'Local Rider', 'Shop Pickup'].includes(o.cod_sub_option)).length },
     ];
     const cityRows = (rows, cityOf) => {
       const m = new Map();
@@ -339,8 +343,8 @@ export default function AnalyticsPanel() {
       });
       return Array.from(m.values()).sort((a, b) => b.parcels - a.parcels);
     };
-    const riderCities = cityRows(codRows.filter(o => o.cod_sub_option === 'Local Rider'), o => titleCase(o.city) || 'Unknown');
-    const postexCities = cityRows(codRows.filter(o => o.cod_sub_option === 'PostEx'), o => {
+    const riderCities = cityRows(O.filter(o => o.cod_sub_option === 'Local Rider'), o => titleCase(o.city) || 'Unknown');
+    const postexCities = cityRows(O.filter(o => o.cod_sub_option === 'PostEx'), o => {
       const prefix = String(o.orderCode || '').split('-')[0].trim().toUpperCase();
       return titleCase(o.city) || pxCodes[prefix] || 'Unknown';
     });
@@ -623,11 +627,11 @@ export default function AnalyticsPanel() {
             <Card title="Advance vs COD" subtitle="Orders by payment method.">
               <SegmentBar parts={r.pay} colors={{ Advance: C.blue, COD: C.orange }} unit="orders" />
             </Card>
-            <Card title="COD paid vs unpaid" subtitle="COD orders by payment status.">
+            <Card title="Rider COD paid vs unpaid" subtitle="D&D and Service Delivery COD orders. PostEx pays into the account, so it is not tracked here.">
               <SegmentBar parts={r.codStatus} colors={{ Paid: C.aqua, Unpaid: C.orange }} unit="orders" />
             </Card>
-            <Card title="COD delivery channel" subtitle="Who delivered the COD orders.">
-              <SegmentBar parts={r.channel} colors={{ PostEx: C.blue, 'D&D': C.aqua, 'Service Delivery': C.yellow }} unit="orders" />
+            <Card title="Delivery company" subtitle="All orders, Advance and COD. Older Advance orders show as Not recorded.">
+              <SegmentBar parts={r.channel} colors={{ PostEx: C.blue, 'D&D': C.aqua, 'Service Delivery': C.yellow, 'Shop Pickup': C.magenta, 'Not recorded': C.gray }} unit="orders" />
             </Card>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

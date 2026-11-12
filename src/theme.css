@@ -1,0 +1,188 @@
+/* =====================================================================
+   Rizwan Clothing - theme layer
+   1) Small polish for both themes.
+   2) Dark theme: everything below is scoped to <html class="dark">.
+      The app keeps its normal Tailwind classes; this file only
+      re-colours them when dark mode is on.
+   ===================================================================== */
+
+/* ---------- 1. Polish (light + dark) ---------- */
+body {
+  font-variant-numeric: tabular-nums; /* numbers line up in tables and cards */
+}
+.rounded-2xl.shadow-sm,
+.rounded-xl.shadow-sm {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.05);
+}
+
+/* ---------- 2. Dark theme ---------- */
+html.dark {
+  color-scheme: dark; /* native inputs, selects, date pickers, scrollbars */
+  --d-page: #0b1020;
+  --d-card: #131a2e;
+  --d-soft: #1a2238;
+  --d-soft-2: #222b45;
+  --d-line: #262f4a;
+  --d-line-2: #323c5c;
+  --d-t1: #eceef6;
+  --d-t2: #cdd1e2;
+  --d-t3: #a9aec4;
+  --d-t4: #8d93ab;
+  --d-t5: #6f7591;
+  --d-t6: #4f5574;
+  --d-brand: #8a7ef3;
+}
+
+/* Page + cards */
+html.dark body,
+.dark .bg-\[\#f5f6fb\],
+.dark .bg-\[\#F8F9FB\] { background-color: var(--d-page); }
+.dark .bg-white { background-color: var(--d-card); }
+.dark .bg-white\/80 { background-color: rgba(19, 26, 46, 0.85); }
+.dark .bg-gray-50,
+.dark .bg-gray-50\/40,
+.dark .bg-gray-50\/50,
+.dark .bg-gray-50\/80,
+.dark .bg-slate-50 { background-color: var(--d-soft); }
+.dark .bg-gray-100,
+.dark .bg-gray-100\/80 { background-color: var(--d-soft-2); }
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-50\/70:hover { background-color: var(--d-soft); }
+.dark .hover\:bg-gray-200:hover { background-color: var(--d-line-2); }
+.dark .focus\:bg-white:focus { background-color: var(--d-card); }
+
+/* Borders */
+.dark .border-gray-50,
+.dark .border-gray-100,
+.dark .divide-gray-100 > * + * { border-color: var(--d-line); }
+.dark .border-gray-200,
+.dark .border-gray-200\/70,
+.dark .border-gray-300,
+.dark .border-slate-200 { border-color: var(--d-line-2); }
+
+/* Text */
+.dark .text-gray-900 { color: var(--d-t1); }
+.dark .text-gray-800 { color: var(--d-t2); }
+.dark .text-gray-700 { color: var(--d-t2); }
+.dark .text-gray-600 { color: var(--d-t3); }
+.dark .text-gray-500 { color: var(--d-t4); }
+.dark .text-gray-400 { color: var(--d-t5); }
+.dark .text-gray-300 { color: var(--d-t6); }
+.dark .hover\:text-gray-600:hover,
+.dark .hover\:text-gray-800:hover { color: var(--d-t1); }
+.dark ::placeholder { color: var(--d-t5); }
+
+/* Inputs without their own background */
+.dark input:not([type='checkbox']):not([type='radio']),
+.dark select,
+.dark textarea { color: var(--d-t1); border-color: var(--d-line-2); }
+
+/* Brand (purple is remapped to the brand violet in index.html) */
+.dark .text-purple-500,
+.dark .text-purple-600,
+.dark .text-purple-700,
+.dark .text-purple-800,
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-violet-700,
+.dark .hover\:text-purple-600:hover,
+.dark .hover\:text-indigo-700:hover,
+.dark .hover\:text-indigo-800:hover { color: #b1a8fa; }
+.dark .bg-purple-50,
+.dark .bg-purple-50\/60,
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/60,
+.dark .bg-violet-100,
+.dark .hover\:bg-purple-50:hover,
+.dark .hover\:bg-indigo-50:hover { background-color: rgba(138, 126, 243, 0.14); }
+.dark .bg-purple-100,
+.dark .hover\:bg-purple-100:hover { background-color: rgba(138, 126, 243, 0.22); }
+.dark .border-purple-100,
+.dark .border-purple-200,
+.dark .border-indigo-100 { border-color: rgba(138, 126, 243, 0.35); }
+
+/* Status tints: soft background + light text */
+.dark .bg-green-50,
+.dark .bg-emerald-50,
+.dark .hover\:bg-green-100:hover { background-color: rgba(34, 197, 94, 0.13); }
+.dark .bg-green-100,
+.dark .bg-emerald-100 { background-color: rgba(34, 197, 94, 0.2); }
+.dark .text-green-600,
+.dark .text-green-700,
+.dark .text-emerald-600,
+.dark .text-emerald-700 { color: #4ade80; }
+.dark .border-green-200 { border-color: rgba(34, 197, 94, 0.35); }
+
+.dark .bg-red-50,
+.dark .bg-red-50\/80,
+.dark .hover\:bg-red-50:hover,
+.dark .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, 0.14); }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.22); }
+.dark .text-red-600,
+.dark .text-red-700 { color: #f87171; }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.35); }
+
+.dark .bg-orange-50,
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.13); }
+.dark .bg-orange-100 { background-color: rgba(245, 158, 11, 0.2); }
+.dark .text-orange-600,
+.dark .text-orange-700,
+.dark .text-orange-800,
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 { color: #fbbf24; }
+.dark .border-orange-200,
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
+
+.dark .bg-blue-50,
+.dark .bg-sky-100 { background-color: rgba(59, 130, 246, 0.15); }
+.dark .text-blue-600,
+.dark .text-sky-700 { color: #60a5fa; }
+
+/* Modal backdrops a bit darker */
+.dark .bg-gray-900\/40,
+.dark .bg-gray-900\/50 { background-color: rgba(2, 6, 18, 0.7); }
+
+/* Scrollbar of the main area */
+.dark .app-scroll { scrollbar-color: #323c5c transparent; }
+.dark .app-scroll::-webkit-scrollbar-thumb { background: #323c5c; }
+.dark .app-scroll::-webkit-scrollbar-thumb:hover { background: #4b4290; }
+
+/* ---------- Charts (Recharts SVG) ---------- */
+/* Grid, axes and hover cursor */
+.dark [stroke='#e1e0d9'],
+.dark [stroke='#ecebe6'] { stroke: #263052; }
+.dark [stroke='#c3c2b7'],
+.dark [stroke='#d6d5cf'] { stroke: #3a4466; }
+.dark [fill='#f3f2ee'] { fill: #1c2440; }
+.dark [fill='#52514e'] { fill: #c3c2b7; }
+/* Gaps between donut slices / dot rings follow the card colour */
+.dark [stroke='#ffffff'],
+.dark [stroke='#fff'] { stroke: #131a2e; }
+
+/* Series colours: the same hues, stepped for a dark background */
+.dark [fill='#2a78d6'] { fill: #3987e5; }
+.dark [stroke='#2a78d6'] { stroke: #3987e5; }
+.dark [fill='#eb6834'] { fill: #d95926; }
+.dark [stroke='#eb6834'] { stroke: #d95926; }
+.dark [fill='#1baf7a'] { fill: #199e70; }
+.dark [stroke='#1baf7a'] { stroke: #199e70; }
+.dark [fill='#eda100'] { fill: #c98500; }
+.dark [stroke='#eda100'] { stroke: #c98500; }
+.dark [fill='#e87ba4'] { fill: #d55181; }
+.dark [stroke='#e87ba4'] { stroke: #d55181; }
+.dark [fill='#b8b6ae'] { fill: #5b6280; }
+.dark [stroke='#b8b6ae'] { stroke: #5b6280; }
+.dark [fill='#5b4cf0'] { fill: var(--d-brand); }
+.dark [stroke='#5b4cf0'] { stroke: var(--d-brand); }
+.dark stop[stop-color='#5b4cf0'] { stop-color: var(--d-brand); }
+
+/* Legend dots and bars drawn with inline background colours */
+.dark [style*='rgb(42, 120, 214)'] { background-color: #3987e5 !important; }
+.dark [style*='rgb(235, 104, 52)'] { background-color: #d95926 !important; }
+.dark [style*='rgb(27, 175, 122)'] { background-color: #199e70 !important; }
+.dark [style*='rgb(237, 161, 0)'] { background-color: #c98500 !important; }
+.dark [style*='rgb(232, 123, 164)'] { background-color: #d55181 !important; }
+.dark [style*='rgb(184, 182, 174)'] { background-color: #5b6280 !important; }
+.dark [style*='rgb(91, 76, 240)'] { background-color: var(--d-brand) !important; }
+.dark [style*='fill: rgb(82, 81, 78)'] { fill: #c3c2b7 !important; }

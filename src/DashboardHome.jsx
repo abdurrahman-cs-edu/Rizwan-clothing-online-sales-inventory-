@@ -11,8 +11,8 @@ import { supabase } from './supabaseClient';
 // Nothing is written. Online sales only; Khata is not included.
 
 const BRAND = '#5b4cf0';
-const CITY_COLORS = ['#2a78d6', '#1baf7a', '#eb6834', '#b8b6ae'];
-const FABRIC_COLORS = ['#5b4cf0', '#2a78d6', '#1baf7a', '#eb6834', '#b8b6ae'];
+const CITY_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#b8b6ae'];
+const FABRIC_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#b8b6ae'];
 const SIZE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
 const titleCase = (v) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 const MUTED = '#898781';
@@ -81,7 +81,7 @@ function Change({ pct }) {
       className={`inline-flex items-center gap-1 text-xs font-bold whitespace-nowrap px-2 py-0.5 rounded-full ${up ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}
       title="Compared with the same days of last month"
     >
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}% vs last month
+      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}% vs same days last month
     </span>
   );
 }
@@ -217,7 +217,7 @@ function LegendList({ data, colors, total }) {
 }
 
 // ---------- Main ----------
-export default function DashboardHome({ sales = [], canonicalDesignName = (n) => n, onOpenSale, onGoTo, onShowOrders }) {
+export default function DashboardHome({ sales = [], canonicalDesignName = (n) => n, onOpenSale, onGoTo, onShowOrders, isPendingCod }) {
   const [fabricByName, setFabricByName] = useState({});
   const [period, setPeriod] = useState('week');
   const [postExCityByPrefix, setPostExCityByPrefix] = useState({});
@@ -293,7 +293,10 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
     }
 
     // Pending COD
-    const pending = sales.filter(x => x.paymentMethod === 'Cash on Delivery' && (x.cod_paid || 'No') === 'No');
+    // PostEx pays into our own account, so only Local Rider COD counts as pending.
+    const pending = sales.filter(x => (isPendingCod
+      ? isPendingCod(x)
+      : x.paymentMethod === 'Cash on Delivery' && (x.cod_sub_option || '') === 'Local Rider' && (x.cod_paid || 'No') === 'No'));
 
     // Top designs this month (fallback: last month)
     const topSource = thisMonth.length ? thisMonth : lastMonth;
@@ -328,7 +331,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
     }
 
     // Local rider cities (all time)
-    const riderSales = sales.filter(x => x.paymentMethod === 'Cash on Delivery' && (x.cod_sub_option || '') === 'Local Rider');
+    const riderSales = sales.filter(x => (x.cod_sub_option || '') === 'Local Rider');
     const cityMap = new Map();
     riderSales.forEach(x => {
       const c = (x.city || 'Unknown').trim() || 'Unknown';
@@ -337,7 +340,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
     const cities = topWithOther(cityMap);
 
     // PostEx cities (all time): city typed on the order, else from the order-code prefix (e.g. PES-476 -> Peshawar)
-    const postExSales = sales.filter(x => x.paymentMethod === 'Cash on Delivery' && (x.cod_sub_option || '') === 'PostEx');
+    const postExSales = sales.filter(x => (x.cod_sub_option || '') === 'PostEx');
     const postExMap = new Map();
     postExSales.forEach(x => {
       const prefix = String(x.orderCode || '').split('-')[0].trim().toUpperCase();
@@ -388,7 +391,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
       fabrics, fabricKnown,
       recent: sales.slice(0, 6),
     };
-  }, [sales, canonicalDesignName, fabricByName, postExCityByPrefix]);
+  }, [sales, canonicalDesignName, fabricByName, postExCityByPrefix, isPendingCod]);
 
   // ---------- Sales Overview chart (Today / This Week / This Month / This Year) ----------
   const chart = useMemo(() => {
@@ -615,6 +618,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
               const paid = (x.cod_paid || 'No') === 'Yes';
               const status = !isCod
                 ? ['Advance', 'bg-green-50 text-green-700']
+                : (x.cod_sub_option || '') !== 'Local Rider' ? ['COD', 'bg-indigo-50 text-indigo-700']
                 : paid ? ['COD paid', 'bg-green-50 text-green-700'] : ['COD unpaid', 'bg-red-50 text-red-600'];
               const designs = (x.items || []).map(it => canonicalDesignName(it.itemName)).join(', ');
               return (

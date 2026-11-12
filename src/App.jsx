@@ -5,6 +5,37 @@ import DesignsPanel from './DesignsPanel';
 import DesignPicker from './DesignPicker';
 import AnalyticsPanel from './AnalyticsPanel';
 import DashboardHome from './DashboardHome';
+import './theme.css';
+
+// Delivery company of an order, for Advance and COD alike.
+// Stored in the existing columns: cod_sub_option ('PostEx' | 'Local Rider' | 'Shop Pickup')
+// and local_rider_sub_option ('D&D' | 'Service Delivery'). Old Advance orders have none ('').
+function deliveryOf(sale) {
+  const sub = sale?.cod_sub_option || sale?.codSubOption || '';
+  if (sub === 'PostEx') return 'PostEx';
+  if (sub === 'Shop Pickup') return 'Shop Pickup';
+  if (sub === 'Local Rider') return (sale?.local_rider_sub_option || sale?.localRiderSubOption) === 'Service Delivery' ? 'Service Delivery' : 'D&D';
+  return '';
+}
+
+// First day of our OWN PostEx account (YYYY-MM-DD). PostEx COD orders from this date on pay into
+// our account and are not tracked as pending. Older PostEx COD orders (other branch's account) stay
+// pending until marked paid. null = not set yet, so ALL unpaid PostEx COD orders stay pending.
+const POSTEX_OWN_ACCOUNT_FROM = null;
+
+function isOldBranchPostEx(sale) {
+  if ((sale?.cod_sub_option || sale?.codSubOption) !== 'PostEx') return false;
+  if (!POSTEX_OWN_ACCOUNT_FROM) return true;
+  return Boolean(sale?.dateStr) && sale.dateStr < POSTEX_OWN_ACCOUNT_FROM;
+}
+
+// Unpaid COD that we must still collect: D&D / Service Delivery, plus old-branch PostEx orders.
+function isRiderCodPending(sale) {
+  const sub = sale?.cod_sub_option || sale?.codSubOption;
+  return sale?.paymentMethod === 'Cash on Delivery'
+    && (sub === 'Local Rider' || isOldBranchPostEx(sale))
+    && (sale?.cod_paid || sale?.codPaid || 'No') === 'No';
+}
 
 export default function App() {
   // Server-verified 4-digit action PIN
@@ -281,10 +312,19 @@ export default function App() {
   // Form States
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Advance Payment');
-  const [codSubOption, setCodSubOption] = useState('PostEx'); 
-  const [localRiderSubOption, setLocalRiderSubOption] = useState('D&D'); 
   const [orderCode, setOrderCode] = useState('');
   const [city, setCity] = useState(''); // Added city state
+  // Light / dark theme (remembered in this browser only)
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('rc_theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
+  });
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try { localStorage.setItem('rc_theme', theme); } catch { /* storage blocked: theme just resets on reload */ }
+  }, [theme]);
+
+  // Delivery company for every order (Advance or COD): '', 'PostEx', 'D&D', 'Service Delivery', 'Shop Pickup'
+  const [delivery, setDelivery] = useState('');
   
   const [orderItems, setOrderItems] = useState([
     { id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
@@ -832,8 +872,7 @@ export default function App() {
     setEditingId(null);
     setCustomerName('');
     setPaymentMethod('Advance Payment');
-    setCodSubOption('PostEx');
-    setLocalRiderSubOption('D&D');
+    setDelivery('');
     setOrderCode('');
     setCity('');
     setOrderItems([{ id: Date.now(), itemName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
@@ -848,8 +887,7 @@ export default function App() {
     setEditingId(sale.id);
     setCustomerName(sale.customerName);
     setPaymentMethod(sale.paymentMethod || 'Advance Payment');
-    setCodSubOption(sale.cod_sub_option || sale.codSubOption || 'PostEx');
-    setLocalRiderSubOption(sale.local_rider_sub_option || sale.localRiderSubOption || 'D&D');
+    setDelivery(deliveryOf(sale));
     setOrderCode(sale.orderCode || '');
     setCity(sale.city || '');
 
@@ -898,8 +936,13 @@ export default function App() {
     if (!customerName.trim()) return;
 
     const isCod = paymentMethod === 'Cash on Delivery';
-    const isPostEx = isCod && codSubOption === 'PostEx';
-    const isLocalRider = isCod && codSubOption === 'Local Rider';
+    if (!delivery) return alert('Please choose a delivery company.');
+    const isPostEx = delivery === 'PostEx';
+    const isLocalRider = delivery === 'D&D' || delivery === 'Service Delivery';
+    const deliveryFields = {
+      cod_sub_option: isPostEx ? 'PostEx' : isLocalRider ? 'Local Rider' : 'Shop Pickup',
+      local_rider_sub_option: isLocalRider ? delivery : '',
+    };
 
     if (isPostEx && !orderCode.trim()) return alert('Please enter an order code for PostEx.');
     if (isLocalRider && !city.trim()) return alert('Please enter a city for the Local Rider.');
@@ -931,8 +974,7 @@ export default function App() {
         const updatedData = {
           customerName: toTitleCase(customerName.trim()),
           paymentMethod,
-          cod_sub_option: isCod ? codSubOption : '',
-          local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
+          ...deliveryFields,
           orderCode: isPostEx ? orderCode.trim() : '',
           city: (isLocalRider || isPostEx) ? toTitleCase(city.trim()) : '',
           cod_paid: isCod ? (existingSale?.cod_paid || 'No') : 'No',
@@ -956,8 +998,7 @@ export default function App() {
           orderNumber: nextOrderNum,
           customerName: toTitleCase(customerName.trim()),
           paymentMethod,
-          cod_sub_option: isCod ? codSubOption : '',
-          local_rider_sub_option: isLocalRider ? localRiderSubOption : '',
+          ...deliveryFields,
           orderCode: isPostEx ? orderCode.trim() : '',
           city: (isLocalRider || isPostEx) ? toTitleCase(city.trim()) : '',
           cod_paid: 'No',
@@ -1044,7 +1085,8 @@ export default function App() {
   const todaysRevenue = todaysSales.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
 
   // PENDING PAYMENTS CALCULATIONS
-  const pendingSales = sales.filter(s => s.paymentMethod === 'Cash on Delivery' && (s.cod_paid || s.codPaid || 'No') === 'No');
+  // PostEx pays into our own account, so only Local Rider (D&D / Service Delivery) COD is tracked as pending.
+  const pendingSales = sales.filter(s => isRiderCodPending(s));
   const globalPendingCount = pendingSales.length;
 
   const displayedPendingSales = pendingSales.filter(s => {
@@ -1227,13 +1269,10 @@ export default function App() {
   // Uses existing Online Sales records only. No separate table is created.
   // With no date filter, this includes the complete historical D&D record.
   const allDndParcels = sales.filter(sale => {
-    const paymentMethodValue = sale.paymentMethod || '';
     const codOption = sale.cod_sub_option || sale.codSubOption || '';
     const riderOption = sale.local_rider_sub_option || sale.localRiderSubOption || '';
 
-    return paymentMethodValue === 'Cash on Delivery' &&
-      codOption === 'Local Rider' &&
-      riderOption === 'D&D';
+    return codOption === 'Local Rider' && riderOption === 'D&D';
   });
 
   const dndRangeFiltered = allDndParcels.filter(sale => {
@@ -1258,7 +1297,7 @@ export default function App() {
   const dndTotalParcels = dndRangeFiltered.length;
   const dndTotalAmount = dndRangeFiltered.reduce((sum, sale) => sum + (Number(sale.totalAmount) || 0), 0);
   const dndTotalSuits = dndRangeFiltered.reduce((sum, sale) => sum + (Number(sale.totalQty) || 0), 0);
-  const dndPaidCount = dndRangeFiltered.filter(sale => (sale.cod_paid || sale.codPaid || 'No') === 'Yes').length;
+  const dndPaidCount = dndRangeFiltered.filter(sale => sale.paymentMethod === 'Advance Payment' || (sale.cod_paid || sale.codPaid || 'No') === 'Yes').length;
   const dndPendingCount = dndTotalParcels - dndPaidCount;
 
   const dndCityMap = {};
@@ -1336,14 +1375,14 @@ export default function App() {
     }
 
     if (activeTab === 'Pending Payments') {
-      if (s.paymentMethod !== 'Cash on Delivery' || (s.cod_paid || s.codPaid || 'No') === 'Yes') return false;
+      if (!isRiderCodPending(s)) return false;
       const subOpt = s.cod_sub_option || s.codSubOption;
       const riderOpt = s.local_rider_sub_option || s.localRiderSubOption;
       if (pendingFilter === 'PostEx' && subOpt !== 'PostEx') return false;
       if (pendingFilter === 'D&D' && (subOpt !== 'Local Rider' || riderOpt !== 'D&D')) return false;
       if (pendingFilter === 'Service Delivery' && (subOpt !== 'Local Rider' || riderOpt === 'D&D')) return false;
     }
-    if (activeTab === 'PostEx Orders' && (s.paymentMethod !== 'Cash on Delivery' || (s.cod_sub_option || s.codSubOption) !== 'PostEx')) return false;
+    if (activeTab === 'PostEx Orders' && (s.cod_sub_option || s.codSubOption) !== 'PostEx') return false;
     
     const query = searchTerm.toLowerCase().trim();
     return query === '' || 
@@ -1395,19 +1434,17 @@ export default function App() {
                          <div className="flex flex-wrap items-center gap-2 mt-0.5">
                            <span className="text-xs font-medium text-gray-500">{sale.displayDate}</span>
                            
-                           {sale.paymentMethod === 'Advance Payment' ? (
-                             <div className="flex flex-col">
+                           <div className="flex flex-wrap gap-1.5 items-center">
+                             {sale.paymentMethod === 'Advance Payment' ? (
                                <span className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-[11px] font-bold tracking-wide uppercase">Advance</span>
-                             </div>
-                           ) : (
-                             <div className="flex gap-1.5 items-center">
+                             ) : (
                                <span className="px-2 py-0.5 bg-orange-50 text-orange-600 rounded text-[11px] font-bold tracking-wide uppercase">COD</span>
-                               <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-[11px] font-bold tracking-wide uppercase">
-                                 {sale.cod_sub_option === 'Local Rider' ? (sale.local_rider_sub_option || 'D&D') : 'PostEx'}
-                               </span>
-                               {sale.orderCode && <span className="text-xs text-gray-500 font-medium">({sale.orderCode})</span>}
-                             </div>
-                           )}
+                             )}
+                             {deliveryOf(sale) && (
+                               <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[11px] font-bold tracking-wide uppercase">{deliveryOf(sale)}</span>
+                             )}
+                             {sale.orderCode && <span className="text-xs text-gray-500 font-medium">({sale.orderCode})</span>}
+                           </div>
                          </div>
 
                          <div className="mt-2 flex flex-col gap-1">
@@ -1497,11 +1534,13 @@ export default function App() {
   return (
     <div className="flex h-screen bg-[#f5f6fb] font-sans text-gray-800">
       <style>{`
-        .sidebar-scroll { scrollbar-width: thin; scrollbar-color: #3b3f6b transparent; }
+        .sidebar-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+        .group:hover .sidebar-scroll { scrollbar-color: #3b3f6b transparent; }
         .sidebar-scroll::-webkit-scrollbar { width: 6px; }
         .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #3b3f6b; border-radius: 9999px; }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #6d63f5; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
+        .group:hover .sidebar-scroll::-webkit-scrollbar-thumb { background: #3b3f6b; }
+        .group:hover .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #6d63f5; }
         .app-scroll { scrollbar-width: thin; scrollbar-color: #c9c3fb transparent; }
         .app-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
         .app-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -1601,11 +1640,20 @@ export default function App() {
           </div>
         </div>
         <nav className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden py-5 px-3 space-y-1">
+          <button
+            type="button"
+            onClick={() => { setIsSidebarOpen(false); handleOpenAddModal(); }}
+            title="New Order"
+            className="w-full mb-3 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-fuchsia-600 to-violet-600 hover:from-fuchsia-500 hover:to-violet-500 shadow-lg shadow-violet-900/40 transition-all"
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
+            <span className="whitespace-nowrap md:opacity-0 md:group-hover:opacity-100 transition-opacity">New Order</span>
+          </button>
           {[
             { name: 'Dashboard', id: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
             { name: 'Charts & Reports', id: 'Charts', icon: 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055zM20.488 9H15V3.512A9.025 9.025 0 0120.488 9z' },
             { name: 'Customer Orders', id: 'Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
-            { name: 'PostEx COD Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
+            { name: 'PostEx Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
             { name: 'D&D Parcels', id: 'D&D Parcels', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10' },
             { name: 'Pending Payments', id: 'Pending Payments', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
             { name: 'Khata', id: 'Khata', icon: 'M3 10h18M5 10V21M19 10V21M4 21h16M12 3l8 4H4l8-4zm-4 7v6m8-6v6' },
@@ -1683,7 +1731,20 @@ export default function App() {
             />
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-6 ml-4">
+          <button
+            type="button"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="w-10 h-10 shrink-0 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50"
+          >
+            {theme === 'dark' ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            )}
+          </button>
+          <div className="hidden sm:flex items-center gap-6">
             <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm">AR</div>
               <span className="hidden sm:block leading-tight">
@@ -1699,7 +1760,7 @@ export default function App() {
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? 'Welcome back, Abdur!' : activeTab}</h1>
-              <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? "Here's what's happening with your store today." : `Manage your ${activeTab.toLowerCase()} data.`}</p>
+              <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? `${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Here's what's happening with your store today.` : `Manage your ${activeTab.toLowerCase()} data.`}</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
@@ -1756,6 +1817,7 @@ export default function App() {
           {activeTab === 'Dashboard' && (
             <div className="space-y-6">
               <DashboardHome
+                isPendingCod={isRiderCodPending}
                 sales={sales}
                 canonicalDesignName={canonicalDesignName}
                 onOpenSale={setDetailsModalSale}
@@ -2078,7 +2140,7 @@ export default function App() {
               <div className="flex flex-wrap gap-2">
                 {[
                   { key: 'All', label: 'All Pending Payments' },
-                  { key: 'PostEx', label: 'PostEx Pending' },
+                  { key: 'PostEx', label: 'PostEx (old branch)' },
                   { key: 'D&D', label: 'D&D Pending' },
                   { key: 'Service Delivery', label: 'Service Delivery Pending' }
                 ].map((flt) => (
@@ -2301,54 +2363,48 @@ export default function App() {
                   <input type="text" required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow" placeholder="John Doe" />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                  <select value={paymentMethod} onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    if(e.target.value === 'Cash on Delivery') setCodSubOption('PostEx');
-                  }} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow">
-                    <option value="Advance Payment">Advance Payment</option>
-                    <option value="Cash on Delivery">Cash on Delivery</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow">
+                      <option value="Advance Payment">Advance Payment</option>
+                      <option value="Cash on Delivery">Cash on Delivery</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Delivery <span className="text-red-500">*</span></label>
+                    <select required value={delivery} onChange={(e) => setDelivery(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none transition-shadow">
+                      <option value="" disabled>Select delivery...</option>
+                      <optgroup label="Online delivery">
+                        <option value="PostEx">PostEx</option>
+                        <option value="D&D">D&D</option>
+                        <option value="Service Delivery">Service Delivery</option>
+                      </optgroup>
+                      <optgroup label="Pickup">
+                        <option value="Shop Pickup">Shop Pickup</option>
+                      </optgroup>
+                    </select>
+                  </div>
                 </div>
 
-                {paymentMethod === 'Cash on Delivery' && (
-                  <div className="pl-4 border-l-2 border-purple-200 space-y-4">
+                {delivery === 'PostEx' && (
+                  <div className="pl-4 border-l-2 border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">COD Option</label>
-                      <select value={codSubOption} onChange={(e) => {
-                        setCodSubOption(e.target.value);
-                        if(e.target.value === 'Local Rider') setLocalRiderSubOption('D&D');
-                      }} className="w-full px-4 py-2 bg-white border border-purple-100 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none">
-                        <option value="PostEx">PostEx</option>
-                        <option value="Local Rider">Local Rider</option>
-                      </select>
+                      <label className="block text-sm font-medium text-purple-800 mb-1">PostEx Order Code <span className="text-red-500">*</span></label>
+                      <input type="text" required value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. PES-123" />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-purple-800 mb-1">City <span className="text-red-500">*</span></label>
+                      <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Enter city name" />
+                    </div>
+                  </div>
+                )}
 
-                    {codSubOption === 'PostEx' && (
-                      <div>
-                        <label className="block text-sm font-medium text-purple-800 mb-1">PostEx Order Code <span className="text-red-500">*</span></label>
-                        <input type="text" required value={orderCode} onChange={(e) => setOrderCode(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. PX-12345" />
-                        <label className="block text-sm font-medium text-purple-800 mb-1 mt-4">City <span className="text-red-500">*</span></label>
-                        <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Enter city name" />
-                      </div>
-                    )}
-
-                    {codSubOption === 'Local Rider' && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-orange-800 mb-1">Select Rider</label>
-                          <select value={localRiderSubOption} onChange={(e) => setLocalRiderSubOption(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                            <option value="D&D">D&D</option>
-                            <option value="Service Delivery">Service Delivery</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-orange-800 mb-1">City <span className="text-red-500">*</span></label>
-                          <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" placeholder="Enter city name" />
-                        </div>
-                      </div>
-                    )}
+                {(delivery === 'D&D' || delivery === 'Service Delivery') && (
+                  <div className="pl-4 border-l-2 border-orange-200">
+                    <label className="block text-sm font-medium text-orange-800 mb-1">City <span className="text-red-500">*</span></label>
+                    <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" placeholder="Enter city name" />
                   </div>
                 )}
               </div>
@@ -3151,20 +3207,20 @@ export default function App() {
                  
                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Payment Type</p>
-                    {detailsModalSale.paymentMethod === 'Advance Payment' ? (
-                       <span className="inline-flex px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold uppercase tracking-wide">Advance</span>
-                    ) : (
-                       <div className="flex flex-col gap-1">
-                          <span className="inline-flex px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-bold uppercase tracking-wide w-fit">COD</span>
-                          <span className="text-xs font-medium text-gray-600">
-                            Via {detailsModalSale.cod_sub_option === 'Local Rider' ? (detailsModalSale.local_rider_sub_option || 'D&D') : 'PostEx'}
-                          </span>
-                       </div>
-                    )}
+                    <div className="flex flex-col gap-1">
+                      {detailsModalSale.paymentMethod === 'Advance Payment' ? (
+                        <span className="inline-flex px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold uppercase tracking-wide w-fit">Advance</span>
+                      ) : (
+                        <span className="inline-flex px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-bold uppercase tracking-wide w-fit">COD</span>
+                      )}
+                      <span className="text-xs font-medium text-gray-600">
+                        Delivery: {deliveryOf(detailsModalSale) || 'Not recorded'}
+                      </span>
+                    </div>
                  </div>
 
                  {/* Show City if it exists and is Local Rider */}
-                 {detailsModalSale.paymentMethod === 'Cash on Delivery' && detailsModalSale.cod_sub_option === 'Local Rider' && detailsModalSale.city && (
+                 {detailsModalSale.city && (
                     <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 sm:col-span-2">
                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">City</p>
                       <p className="font-semibold text-gray-900">{detailsModalSale.city}</p>
