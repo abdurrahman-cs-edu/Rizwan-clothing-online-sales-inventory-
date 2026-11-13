@@ -38,6 +38,8 @@ html.dark body,
 .dark .bg-\[\#f5f6fb\],
 .dark .bg-\[\#F8F9FB\] { background-color: var(--d-page); }
 .dark .bg-white { background-color: var(--d-card); }
+/* Selected item in a grey toggle (bg-white inside bg-gray-100) */
+.dark .bg-gray-100 .bg-white { background-color: var(--d-line-2); }
 .dark .bg-white\/80 { background-color: rgba(19, 26, 46, 0.85); }
 .dark .bg-gray-50,
 .dark .bg-gray-50\/40,
@@ -47,7 +49,12 @@ html.dark body,
 .dark .bg-gray-100,
 .dark .bg-gray-100\/80 { background-color: var(--d-soft-2); }
 .dark .hover\:bg-gray-50:hover,
-.dark .hover\:bg-gray-50\/70:hover { background-color: var(--d-soft); }
+.dark .hover\:bg-gray-50\/60:hover,
+.dark .hover\:bg-gray-50\/70:hover,
+.dark .hover\:bg-white:hover,
+.dark .hover\:bg-slate-50:hover { background-color: var(--d-soft-2); }
+.dark .bg-gray-50\/60,
+.dark .bg-slate-50\/80 { background-color: var(--d-soft); }
 .dark .hover\:bg-gray-200:hover { background-color: var(--d-line-2); }
 .dark .focus\:bg-white:focus { background-color: var(--d-card); }
 
