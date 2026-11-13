@@ -7,6 +7,7 @@ import AnalyticsPanel from './AnalyticsPanel';
 import DashboardHome from './DashboardHome';
 import './theme.css';
 import LoginScreen from './LoginScreen';
+import AskAIPanel, { SPARKLES_PATH } from './AskAIPanel';
 
 // Delivery company of an order, for Advance and COD alike.
 // Stored in the existing columns: cod_sub_option ('PostEx' | 'Local Rider' | 'Shop Pickup')
@@ -324,6 +325,8 @@ function MainApp({ user, role, onSignOut }) {
 
   // Navigation & Filter States
   const [activeTab, setActiveTab] = useState('Dashboard');
+  // Local Riders tab: 'All', 'D&D' or 'Service Delivery'
+  const [riderFilter, setRiderFilter] = useState('All');
   // Staff can never stay on an admin-only tab (e.g. via a dashboard link).
   useEffect(() => {
     if (!isAdmin && ADMIN_ONLY_TABS.includes(activeTab)) setActiveTab('Dashboard');
@@ -360,6 +363,8 @@ function MainApp({ user, role, onSignOut }) {
   const [khataOwnerSearch, setKhataOwnerSearch] = useState('');
   const [khataNewCustomerConfirmed, setKhataNewCustomerConfirmed] = useState(false);
   const [khataNote, setKhataNote] = useState('');
+  // Was the bill for these suits made in the main retail software? 'submitted' | 'not_submitted'
+  const [khataBillStatus, setKhataBillStatus] = useState('');
   const [khataProfileOwner, setKhataProfileOwner] = useState(null);
   const [khataDesignItems, setKhataDesignItems] = useState([
     { id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
@@ -485,6 +490,7 @@ function MainApp({ user, role, onSignOut }) {
     setKhataOwnerSearch('');
     setKhataNewCustomerConfirmed(false);
     setKhataNote('');
+    setKhataBillStatus('');
     setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
     setKhataPaid('No');
     setKhataPaymentType('Cash');
@@ -502,6 +508,7 @@ function MainApp({ user, role, onSignOut }) {
     setKhataOwnerSearch(ownerName);
     setKhataNewCustomerConfirmed(true);
     setKhataNote('');
+    setKhataBillStatus('');
     setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
     setKhataPaid('No');
     setKhataPaymentType('Cash');
@@ -522,6 +529,7 @@ function MainApp({ user, role, onSignOut }) {
     setKhataOwnerSearch('');
     setKhataNewCustomerConfirmed(true);
     setKhataNote(entry.note || '');
+    setKhataBillStatus(entry.bill_status || '');
     const savedSizeQty = entry.size_qty && typeof entry.size_qty === 'object'
       ? {
           S: Number(entry.size_qty.S) || 0,
@@ -646,6 +654,10 @@ function MainApp({ user, role, onSignOut }) {
       return alert('Please enter a design name, at least one suit quantity, and a valid price for every design.');
     }
 
+    if (khataBillStatus !== 'submitted' && khataBillStatus !== 'not_submitted') {
+      return alert('Please choose whether the bill was made in the main software (Bill submitted / Bill not submitted).');
+    }
+
     const pin = pendingActionPin || await requestActionPin(editingKhataId ? 'save this Khata edit' : 'add this Khata entry');
     if (!pin) return;
 
@@ -671,7 +683,8 @@ function MainApp({ user, role, onSignOut }) {
           paid_at: paidAt,
           payment_method: isNowPaid ? khataPaymentType : 'Cash',
           purchase_id: existingEntry?.purchase_id || null,
-          note: khataNote.trim()
+          note: khataNote.trim(),
+          bill_status: khataBillStatus
         };
 
         const result = await callProtectedMutation('update_khata', { id: editingKhataId, payload }, 'save this Khata edit', pin);
@@ -690,7 +703,8 @@ function MainApp({ user, role, onSignOut }) {
           paid_at: paidAt,
           payment_method: isNowPaid ? khataPaymentType : 'Cash',
           purchase_id: purchaseId,
-          note: khataNote.trim()
+          note: khataNote.trim(),
+          bill_status: khataBillStatus
         }));
 
         const result = await callProtectedMutation('insert_khata', { rows: payloads }, 'add this Khata entry', pin);
@@ -701,6 +715,7 @@ function MainApp({ user, role, onSignOut }) {
       setEditingKhataId(null);
       setPendingActionPin('');
       setKhataNote('');
+      setKhataBillStatus('');
       setKhataDesignItems([{ id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }]);
       await fetchKhataData();
       setKhataProfileOwner(ownerName);
@@ -1182,6 +1197,7 @@ function MainApp({ user, role, onSignOut }) {
           id: key,
           created_at: entry.created_at,
           note: entry.note || '',
+          billStatuses: new Set(),
           entries: [],
           totalAmount: 0,
           totalQty: 0
@@ -1192,6 +1208,7 @@ function MainApp({ user, role, onSignOut }) {
       groups[key].totalAmount += Number(entry.amount) || 0;
       groups[key].totalQty += Number(entry.quantity) || getEntryQtyFallback(entry);
       if (!groups[key].note && entry.note) groups[key].note = entry.note;
+      groups[key].billStatuses.add(entry.bill_status || 'unknown');
     });
 
     return Object.values(groups).sort(
@@ -1332,8 +1349,11 @@ function MainApp({ user, role, onSignOut }) {
     const codOption = sale.cod_sub_option || sale.codSubOption || '';
     const riderOption = sale.local_rider_sub_option || sale.localRiderSubOption || '';
 
-    return codOption === 'Local Rider' && riderOption === 'D&D';
+    if (codOption !== 'Local Rider') return false;
+    const company = riderOption === 'Service Delivery' ? 'Service Delivery' : 'D&D';
+    return riderFilter === 'All' || company === riderFilter;
   });
+  const riderLabel = riderFilter === 'All' ? 'Local Rider' : riderFilter;
 
   const dndRangeFiltered = allDndParcels.filter(sale => {
     if (!appliedRange) return true;
@@ -1593,6 +1613,18 @@ function MainApp({ user, role, onSignOut }) {
 
   return (
     <div className="flex h-screen bg-[#f5f6fb] font-sans text-gray-800">
+      {/* Floating AI button (bottom right): opens the Ask AI page */}
+      {activeTab !== 'Ask AI' && (
+        <button
+          type="button"
+          onClick={() => { setActiveTab('Ask AI'); setIsSidebarOpen(false); }}
+          title="Ask AI"
+          aria-label="Ask AI"
+          className="fixed z-40 right-5 bottom-5 sm:right-6 sm:bottom-6 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl shadow-violet-500/30 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d={SPARKLES_PATH}></path></svg>
+        </button>
+      )}
       <style>{`
         .sidebar-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
         .group:hover .sidebar-scroll { scrollbar-color: #3b3f6b transparent; }
@@ -1711,10 +1743,11 @@ function MainApp({ user, role, onSignOut }) {
           </button>
           {[
             { name: 'Dashboard', id: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+            { name: 'Ask AI', id: 'Ask AI', icon: SPARKLES_PATH },
             { name: 'Charts & Reports', id: 'Charts', icon: 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055zM20.488 9H15V3.512A9.025 9.025 0 0120.488 9z' },
             { name: 'Customer Orders', id: 'Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
             { name: 'PostEx Orders', id: 'PostEx Orders', icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4' },
-            { name: 'D&D Parcels', id: 'D&D Parcels', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10' },
+            { name: 'Local Riders', id: 'D&D Parcels', icon: 'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7M12 11v10' },
             { name: 'Pending Payments', id: 'Pending Payments', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
             { name: 'Khata', id: 'Khata', icon: 'M3 10h18M5 10V21M19 10V21M4 21h16M12 3l8 4H4l8-4zm-4 7v6m8-6v6' },
             { name: 'Sales History', id: 'Sales History', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
@@ -1782,7 +1815,7 @@ function MainApp({ user, role, onSignOut }) {
                 activeTab === 'Khata'
                   ? 'Search shop owners or designs...'
                   : activeTab === 'D&D Parcels'
-                    ? 'Search D&D parcels by customer, city, design or order...'
+                    ? 'Search rider parcels by customer, city, design or order...'
                     : 'Search orders, customers, or cities...'
               }
               value={activeTab === 'Khata' ? khataSearchTerm : searchTerm}
@@ -1828,12 +1861,12 @@ function MainApp({ user, role, onSignOut }) {
           
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-8 gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? (isAdmin ? 'Welcome back, Abdur!' : 'Welcome back!') : activeTab}</h1>
-              <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? `${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Here's what's happening with your store today.` : `Manage your ${activeTab.toLowerCase()} data.`}</p>
+              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight break-words">{activeTab === 'Dashboard' ? (isAdmin ? 'Welcome back, Abdur!' : 'Welcome back!') : activeTab === 'D&D Parcels' ? 'Local Riders' : activeTab}</h1>
+              <p className="text-sm text-gray-500 mt-1">{activeTab === 'Dashboard' ? `${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Here's what's happening with your store today.` : activeTab === 'Ask AI' ? '' : activeTab === 'D&D Parcels' ? 'D&D and Service Delivery parcels in one place.' : `Manage your ${activeTab.toLowerCase()} data.`}</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && activeTab !== 'Khata' && activeTab !== 'Charts' && (
+              {activeTab !== 'Sales History' && activeTab !== 'Dashboard' && activeTab !== 'Khata' && activeTab !== 'Charts' && activeTab !== 'Ask AI' && (
                 <div className="w-full xl:w-auto flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">From</span>
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm border-none outline-none text-gray-700 bg-transparent cursor-pointer font-medium flex-1 min-w-[130px]" />
@@ -1871,13 +1904,26 @@ function MainApp({ user, role, onSignOut }) {
                 </>
               ) : (
                 <>
-                  <button onClick={handleExportBackup} className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-colors flex-1 sm:flex-none">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    Export
-                  </button>
-                  <button onClick={handleOpenAddModal} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center justify-center flex-1 sm:flex-none">
-                    + New Order
-                  </button>
+                  {activeTab === 'Dashboard' && (
+                    <button
+                      onClick={handleExportBackup}
+                      title="Download a backup of all online orders (JSON)"
+                      className="group/export bg-white border border-gray-200 hover:border-purple-300 hover:bg-purple-50 text-gray-700 pl-2 pr-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2.5 shadow-sm transition-colors flex-1 sm:flex-none"
+                    >
+                      <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                      </span>
+                      <span className="text-left leading-tight">
+                        Export backup
+                        <span className="block text-[10px] font-medium text-gray-400">All orders · JSON</span>
+                      </span>
+                    </button>
+                  )}
+                  {['Dashboard', 'Orders', 'PostEx Orders', 'D&D Parcels', 'Pending Payments', 'Sales History'].includes(activeTab) && (
+                    <button onClick={handleOpenAddModal} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-sm transition-colors flex items-center justify-center flex-1 sm:flex-none">
+                      + New Order
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -1902,26 +1948,38 @@ function MainApp({ user, role, onSignOut }) {
           {/* D&D PARCELS TAB */}
           {activeTab === 'D&D Parcels' && (
             <div className="space-y-6">
+              <div className="flex flex-wrap gap-2">
+                {['All', 'D&D', 'Service Delivery'].map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setRiderFilter(opt)}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${riderFilter === opt ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    {opt === 'All' ? 'All Riders' : opt}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total D&D Parcels</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total {riderLabel} Parcels</p>
                   <p className="text-3xl font-black text-gray-900 mt-2">{dndTotalParcels}</p>
                   <p className="text-xs text-gray-500 mt-2">
-                    {appliedRange ? 'In selected date range' : 'All-time D&D history'}
+                    {appliedRange ? 'In selected date range' : `All-time ${riderLabel} history`}
                   </p>
                 </div>
 
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total D&D Amount</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total {riderLabel} Amount</p>
                   <p className="text-3xl font-black text-gray-900 mt-2">PKR {dndTotalAmount.toLocaleString()}</p>
                   <p className="text-xs text-gray-500 mt-2">{dndTotalSuits.toLocaleString()} suits in these parcels</p>
                 </div>
 
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Top D&D City</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Top {riderLabel} City</p>
                   <p className="text-2xl font-black text-purple-700 mt-2 break-words">{dndTopCity?.city || 'No data'}</p>
                   <p className="text-xs text-gray-500 mt-2">
-                    {dndTopCity ? `${dndTopCity.parcels} parcels • PKR ${dndTopCity.amount.toLocaleString()}` : 'No D&D parcels found'}
+                    {dndTopCity ? `${dndTopCity.parcels} parcels • PKR ${dndTopCity.amount.toLocaleString()}` : `No ${riderLabel} parcels found`}
                   </p>
                 </div>
 
@@ -1943,8 +2001,8 @@ function MainApp({ user, role, onSignOut }) {
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">D&D City Breakdown</h3>
-                    <p className="text-xs text-gray-500 mt-1">Cities ranked by number of D&D parcels sent.</p>
+                    <h3 className="text-lg font-bold text-gray-900">{riderLabel} City Breakdown</h3>
+                    <p className="text-xs text-gray-500 mt-1">Cities ranked by number of {riderLabel} parcels sent.</p>
                   </div>
                   <span className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-full">
                     {dndCityStats.length} Cities
@@ -1973,7 +2031,7 @@ function MainApp({ user, role, onSignOut }) {
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan="5" className="py-8 text-center text-gray-400">No D&D city data found.</td>
+                          <td colSpan="5" className="py-8 text-center text-gray-400">No {riderLabel} city data found.</td>
                         </tr>
                       )}
                     </tbody>
@@ -1984,13 +2042,13 @@ function MainApp({ user, role, onSignOut }) {
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100">
                   <h3 className="text-lg font-bold text-gray-900">
-                    Complete D&D Parcel History
+                    Complete {riderLabel} Parcel History
                     <span className="ml-2 text-sm font-semibold text-gray-400">({dndDisplayedParcels.length})</span>
                   </h3>
                   <p className="text-xs text-gray-500 mt-1">
                     {appliedRange
                       ? `${formatReadableDate(appliedRange.start)} to ${formatReadableDate(appliedRange.end)}`
-                      : 'Showing all old and new D&D parcels saved in Online Sales'}
+                      : `Showing all old and new ${riderLabel} parcels saved in Online Sales`}
                   </p>
                 </div>
 
@@ -2009,7 +2067,7 @@ function MainApp({ user, role, onSignOut }) {
                     </thead>
                     <tbody className="text-sm">
                       {dndDisplayedParcels.length > 0 ? dndDisplayedParcels.map(sale => {
-                        const isPaid = (sale.cod_paid || sale.codPaid || 'No') === 'Yes';
+                        const isPaid = sale.paymentMethod === 'Advance Payment' || (sale.cod_paid || sale.codPaid || 'No') === 'Yes';
                         return (
                           <tr key={sale.id} className="border-b border-gray-50 hover:bg-gray-50/70">
                             <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
@@ -2026,7 +2084,10 @@ function MainApp({ user, role, onSignOut }) {
                               </button>
                               <span className="block text-[11px] text-gray-400 mt-0.5">Order #{sale.orderNumber || '-'}</span>
                             </td>
-                            <td className="py-3 px-4 font-semibold text-gray-800">{sale.city || 'Unknown City'}</td>
+                            <td className="py-3 px-4 font-semibold text-gray-800">
+                              {sale.city || 'Unknown City'}
+                              <span className="block text-[11px] font-medium text-gray-400 mt-0.5">{deliveryOf(sale)}</span>
+                            </td>
                             <td className="py-3 px-4">
                               <div className="space-y-1">
                                 {(sale.items || []).map((item, index) => (
@@ -2051,7 +2112,7 @@ function MainApp({ user, role, onSignOut }) {
                       }) : (
                         <tr>
                           <td colSpan="7" className="py-10 text-center text-gray-400">
-                            No D&D parcels found for this view.
+                            No {riderLabel} parcels found for this view.
                           </td>
                         </tr>
                       )}
@@ -2340,6 +2401,8 @@ function MainApp({ user, role, onSignOut }) {
           {activeTab === 'Designs' && isAdmin && <DesignsPanel requestActionPin={requestActionPin} />}
 
           {activeTab === 'Charts' && isAdmin && <AnalyticsPanel />}
+
+          {activeTab === 'Ask AI' && <AskAIPanel isAdmin={isAdmin} />}
 
           {activeTab === 'Top Selling Designs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -3017,6 +3080,32 @@ function MainApp({ user, role, onSignOut }) {
                 </div>
 
                 <div>
+                  <label className="block text-xs font-normal text-gray-700 mb-1.5">
+                    Bill in main software <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: 'submitted', label: 'Bill submitted', hint: 'Bill made in retail software' },
+                      { value: 'not_submitted', label: 'Bill not submitted', hint: 'Bill still to be made' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setKhataBillStatus(opt.value)}
+                        className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
+                          khataBillStatus === opt.value
+                            ? (opt.value === 'submitted' ? 'border-green-500 bg-green-50 text-green-700' : 'border-orange-400 bg-orange-50 text-orange-700')
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold">{opt.label}</span>
+                        <span className="block text-[11px] opacity-75">{opt.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs font-normal text-gray-700 mb-1.5">Note <span className="text-gray-400 font-normal">(optional)</span></label>
                   <textarea
                     value={khataNote}
@@ -3225,6 +3314,14 @@ function MainApp({ user, role, onSignOut }) {
                       </div>
 
                       <div className="p-4 sm:p-5 bg-slate-50 border-t border-gray-200">
+                        {(() => {
+                          const st = purchase.billStatuses ? [...purchase.billStatuses] : [];
+                          const label = st.length === 1 && st[0] === 'submitted' ? ['Bill submitted', 'bg-green-50 text-green-700 border-green-200']
+                            : st.length === 1 && st[0] === 'not_submitted' ? ['Bill not submitted', 'bg-orange-50 text-orange-700 border-orange-200']
+                            : st.includes('not_submitted') ? ['Some bills not submitted', 'bg-orange-50 text-orange-700 border-orange-200']
+                            : ['Bill status not recorded', 'bg-gray-100 text-gray-500 border-gray-200'];
+                          return <span className={`inline-flex mb-3 px-2.5 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wide ${label[1]}`}>{label[0]}</span>;
+                        })()}
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Note</p>
                         <p className={`text-sm mt-1 ${purchase.note ? 'text-gray-700' : 'text-gray-400 italic'}`}>
                           {purchase.note || 'No note added for this purchase.'}
