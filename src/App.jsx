@@ -366,6 +366,7 @@ function MainApp({ user, role, onSignOut }) {
   // Was the bill for these suits made in the main retail software? 'submitted' | 'not_submitted'
   const [khataBillStatus, setKhataBillStatus] = useState('');
   const [khataProfileOwner, setKhataProfileOwner] = useState(null);
+  const [khataProfileFilter, setKhataProfileFilter] = useState('all'); // all | pending | nobill
   const [khataDesignItems, setKhataDesignItems] = useState([
     { id: Date.now(), designName: '', price: '', sizeQty: { S: 0, M: 0, L: 0, XL: 0, XXL: 0 } }
   ]);
@@ -1225,8 +1226,16 @@ function MainApp({ user, role, onSignOut }) {
         name: ownerName,
         pending: 0,
         total: 0,
-        purchaseKeys: new Set()
+        purchaseKeys: new Set(),
+        billMissing: 0,
+        billUnknown: 0,
+        lastDate: null
       };
+    }
+    if (entry.bill_status === 'not_submitted') khataOwnerMap[ownerName].billMissing += 1;
+    if (!entry.bill_status) khataOwnerMap[ownerName].billUnknown += 1;
+    if (!khataOwnerMap[ownerName].lastDate || String(entry.created_at) > String(khataOwnerMap[ownerName].lastDate)) {
+      khataOwnerMap[ownerName].lastDate = entry.created_at;
     }
 
     const amount = Number(entry.amount) || 0;
@@ -1243,7 +1252,10 @@ function MainApp({ user, role, onSignOut }) {
       name: owner.name,
       pending: owner.pending,
       total: owner.total,
-      count: owner.purchaseKeys.size
+      count: owner.purchaseKeys.size,
+      billMissing: owner.billMissing,
+      billUnknown: owner.billUnknown,
+      lastDate: owner.lastDate
     }))
     .sort((a, b) => {
       if (b.pending !== a.pending) return b.pending - a.pending;
@@ -1321,6 +1333,12 @@ function MainApp({ user, role, onSignOut }) {
   );
 
   const khataPendingOwners = khataOwners.filter(owner => owner.pending > 0).length;
+  const khataBillsMissing = khataEntries.filter(entry => entry.bill_status === 'not_submitted').length;
+  const khataProfileRows = [...khataProfileEntries]
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .filter(entry => khataProfileFilter === 'pending' ? !entry.paid
+      : khataProfileFilter === 'nobill' ? entry.bill_status !== 'submitted'
+      : true);
 
   const khataFilteredEntries = khataEntries.filter(entry => {
     const matchesOwner = !khataSelectedOwner || entry.owner_name === khataSelectedOwner;
@@ -2293,7 +2311,7 @@ function MainApp({ user, role, onSignOut }) {
           
           {activeTab === 'Khata' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div className="bg-red-50/80 border-2 border-red-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
                   <div>
                     <p className="text-xs font-bold text-red-600 uppercase tracking-wider">Total Pending Payment</p>
@@ -2326,6 +2344,17 @@ function MainApp({ user, role, onSignOut }) {
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   </div>
                 </div>
+
+                <div className={`p-5 rounded-2xl flex items-center justify-between shadow-sm border-2 ${khataBillsMissing > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
+                  <div>
+                    <p className={`text-xs font-bold uppercase tracking-wider ${khataBillsMissing > 0 ? 'text-orange-700' : 'text-gray-500'}`}>Bills Not Submitted</p>
+                    <p className="text-3xl font-semibold text-gray-800 mt-1">{khataBillsMissing}</p>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">Suits not billed in main software</p>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                  </div>
+                </div>
               </div>
 
               <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
@@ -2349,41 +2378,50 @@ function MainApp({ user, role, onSignOut }) {
                         <button
                           key={owner.name}
                           type="button"
-                          onClick={() => setKhataProfileOwner(owner.name)}
-                          className="text-left border border-gray-200 hover:border-purple-400 hover:shadow-md bg-white p-5 rounded-2xl shadow-sm transition-all"
+                          onClick={() => { setKhataProfileFilter('all'); setKhataProfileOwner(owner.name); }}
+                          className="text-left border border-gray-200 hover:border-purple-400 hover:shadow-md bg-white p-4 rounded-2xl shadow-sm transition-all"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white font-bold flex items-center justify-center">
+                              {(owner.name || '?').trim().charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
                               <h3 className="text-base font-semibold text-gray-800 truncate">{owner.name}</h3>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-[11px] text-gray-400">
                                 {owner.count} {owner.count === 1 ? 'purchase' : 'purchases'}
+                                {owner.lastDate ? ` · last ${new Date(owner.lastDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
                               </p>
                             </div>
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ${
-                              owner.pending > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-                            }`}>
-                              {owner.pending > 0 ? 'Pending' : 'Clear'}
-                            </span>
+                            <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-gray-100">
+                          <div className="flex items-end justify-between gap-3 mt-4">
                             <div>
                               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Pending</p>
-                              <p className={`text-lg font-semibold mt-1 ${owner.pending > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                PKR {owner.pending.toLocaleString()}
+                              <p className={`text-lg font-semibold ${owner.pending > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {owner.pending > 0 ? `PKR ${owner.pending.toLocaleString()}` : 'Clear'}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Bought</p>
-                              <p className="text-lg font-semibold text-gray-800 mt-1">PKR {owner.total.toLocaleString()}</p>
-                            </div>
+                            <p className="text-[11px] text-gray-400 text-right">Total<br /><span className="text-sm font-semibold text-gray-700">PKR {owner.total.toLocaleString()}</span></p>
                           </div>
 
-                          <div className="mt-4 text-xs font-bold text-purple-600 flex items-center justify-end gap-1">
-                            Open full profile
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-                            </svg>
+                          <div className="flex flex-wrap gap-1.5 mt-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${owner.pending > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                              {owner.pending > 0 ? '● Payment pending' : '✓ Payment clear'}
+                            </span>
+                            {owner.billMissing > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700">
+                                ! {owner.billMissing} bill{owner.billMissing === 1 ? '' : 's'} not submitted
+                              </span>
+                            ) : owner.billUnknown > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">
+                                Bill status not recorded
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-600">
+                                ✓ All bills submitted
+                              </span>
+                            )}
                           </div>
                         </button>
                       ))}
@@ -2947,7 +2985,7 @@ function MainApp({ user, role, onSignOut }) {
             )}
 
             {(editingKhataId || khataModalStep === 'purchase') && (
-              <form onSubmit={handleSubmitKhataLocked} className="p-5 space-y-5 overflow-y-auto max-h-[78vh]">
+              <form onSubmit={handleSubmitKhataLocked} className="app-scroll p-5 space-y-5 overflow-y-auto max-h-[78vh]">
                 <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-purple-500">Customer</p>
@@ -3083,38 +3121,23 @@ function MainApp({ user, role, onSignOut }) {
                   <label className="block text-xs font-normal text-gray-700 mb-1.5">
                     Bill in main software <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex bg-gray-100 p-1 rounded-lg">
                     {[
-                      { value: 'submitted', label: 'Bill submitted', hint: 'Bill made in retail software' },
-                      { value: 'not_submitted', label: 'Bill not submitted', hint: 'Bill still to be made' },
+                      { value: 'submitted', label: 'Bill submitted', on: 'text-green-600' },
+                      { value: 'not_submitted', label: 'Bill not submitted', on: 'text-orange-600' },
                     ].map((opt) => (
                       <button
                         key={opt.value}
                         type="button"
                         onClick={() => setKhataBillStatus(opt.value)}
-                        className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
-                          khataBillStatus === opt.value
-                            ? (opt.value === 'submitted' ? 'border-green-500 bg-green-50 text-green-700' : 'border-orange-400 bg-orange-50 text-orange-700')
-                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+                          khataBillStatus === opt.value ? `bg-white shadow-sm ${opt.on}` : 'text-gray-500'
                         }`}
                       >
-                        <span className="block text-sm font-semibold">{opt.label}</span>
-                        <span className="block text-[11px] opacity-75">{opt.hint}</span>
+                        {opt.label}
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-normal text-gray-700 mb-1.5">Note <span className="text-gray-400 font-normal">(optional)</span></label>
-                  <textarea
-                    value={khataNote}
-                    onChange={(e) => setKhataNote(e.target.value.slice(0, 500))}
-                    rows="3"
-                    className="w-full px-3 py-2.5 bg-white text-sm text-gray-700 border border-gray-300 rounded-md shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors resize-none"
-                    placeholder="e.g. Promised payment on Friday, special rate, returned one piece..."
-                  />
-                  <p className="text-[10px] text-gray-400 text-right mt-1">{khataNote.length}/500</p>
                 </div>
 
                 <div>
@@ -3156,6 +3179,18 @@ function MainApp({ user, role, onSignOut }) {
                     </select>
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-xs font-normal text-gray-700 mb-1.5">Note <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <textarea
+                    value={khataNote}
+                    onChange={(e) => setKhataNote(e.target.value.slice(0, 500))}
+                    rows="3"
+                    className="w-full px-3 py-2.5 bg-white text-sm text-gray-700 border border-gray-300 rounded-md shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors resize-none"
+                    placeholder="e.g. Promised payment on Friday, special rate, returned one piece..."
+                  />
+                  <p className="text-[10px] text-gray-400 text-right mt-1">{khataNote.length}/500</p>
+                </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                   <button
@@ -3218,119 +3253,105 @@ function MainApp({ user, role, onSignOut }) {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { key: 'all', label: 'All' },
+                    { key: 'pending', label: 'Payment pending' },
+                    { key: 'nobill', label: 'Bill not submitted' },
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setKhataProfileFilter(f.key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${khataProfileFilter === f.key ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => openKhataPurchaseForOwner(khataProfileOwner)}
-                  className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm"
                 >
                   + Add New Purchase
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {khataProfilePurchases.length > 0 ? khataProfilePurchases.map((purchase, purchaseIndex) => {
-                  const purchasePaid = purchase.entries.every(entry => !!entry.paid);
-                  const latestPaidAt = purchase.entries
-                    .map(entry => entry.paid_at)
-                    .filter(Boolean)
-                    .sort()
-                    .slice(-1)[0];
+              <div className="rounded-2xl border border-gray-200 overflow-hidden">
+                <div className="hidden md:grid grid-cols-[minmax(0,1fr)_120px_60px_110px_120px_76px] gap-3 px-4 py-2.5 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  <span>Design · Date</span>
+                  <span>Sizes</span>
+                  <span className="text-right">Qty</span>
+                  <span className="text-right">Amount</span>
+                  <span>Bill · Payment</span>
+                  <span className="text-right">Actions</span>
+                </div>
 
-                  return (
-                    <div key={purchase.id} className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                      <div className="p-4 sm:p-5 bg-gray-50/80 border-b border-gray-200 flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Purchase #{khataProfilePurchases.length - purchaseIndex}</p>
-                          <p className="font-semibold text-gray-800 mt-1">{formatKhataDateTime(purchase.created_at)}</p>
-                          {purchasePaid && latestPaidAt && (
-                            <p className="text-[10px] font-semibold text-green-600 mt-1">{timeAgo(latestPaidAt)}</p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                            purchasePaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {purchasePaid ? 'Paid' : 'Pending'}
-                          </span>
-                          <p className="text-xl font-semibold text-gray-800 mt-2">PKR {purchase.totalAmount.toLocaleString()}</p>
-                          <p className="text-xs text-gray-500">{purchase.totalQty} suits</p>
-                        </div>
-                      </div>
-
-                      <div className="divide-y divide-gray-100">
-                        {purchase.entries.map(entry => (
-                          <div key={entry.id} className="p-4 sm:p-5">
-                            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h4 className="font-semibold text-blue-600">{entry.design_name}</h4>
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    entry.paid ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                                  }`}>
-                                    {entry.paid ? `Paid • ${entry.payment_method || 'Cash'}` : 'Unpaid'}
-                                  </span>
-                                </div>
-
-                                <p className="text-xs text-gray-500 mt-1">
-                                  PKR {(Number(entry.unit_price) || 0).toLocaleString()} per suit
-                                </p>
-
-                                <div className="flex flex-wrap gap-1.5 mt-3">
-                                  {['S', 'M', 'L', 'XL', 'XXL'].map(sz => {
-                                    const qty = Number(entry.size_qty?.[sz]) || 0;
-                                    return qty > 0 ? (
-                                      <span key={sz} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-semibold">
-                                        {sz}: {qty}
-                                      </span>
-                                    ) : null;
-                                  })}
-                                </div>
-                              </div>
-
-                              <div className="lg:text-right shrink-0">
-                                <p className="text-xs text-gray-500">Qty {Number(entry.quantity) || getEntryQtyFallback(entry)}</p>
-                                <p className="font-semibold text-gray-800 mt-1">PKR {(Number(entry.amount) || 0).toLocaleString()}</p>
-                                <div className="flex lg:justify-end gap-2 mt-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditKhata(entry)}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteKhata(entry.id)}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
+                {khataProfileRows.length > 0 ? (() => {
+                  const seenNotes = new Set();
+                  return khataProfileRows.map(entry => {
+                    const purchaseKey = getKhataPurchaseKey(entry);
+                    const showNote = entry.note && !seenNotes.has(purchaseKey);
+                    if (entry.note) seenNotes.add(purchaseKey);
+                    const bill = entry.bill_status === 'submitted'
+                      ? { text: 'Bill ✓', cls: 'bg-green-50 text-green-700', title: 'Bill submitted in main software' }
+                      : entry.bill_status === 'not_submitted'
+                        ? { text: 'No bill', cls: 'bg-orange-50 text-orange-700', title: 'Bill not submitted yet' }
+                        : { text: 'Bill ?', cls: 'bg-gray-100 text-gray-500', title: 'Bill status not recorded' };
+                    const sizes = ['S', 'M', 'L', 'XL', 'XXL']
+                      .map(sz => [sz, Number(entry.size_qty?.[sz]) || 0])
+                      .filter(([, q]) => q > 0);
+                    return (
+                      <div key={entry.id} className="border-t border-gray-100 first:border-t-0 px-4 py-3 hover:bg-gray-50/60">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_120px_60px_110px_120px_76px] gap-x-3 gap-y-1.5 items-center">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{entry.design_name}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {formatKhataDateTime(entry.created_at)} · PKR {(Number(entry.unit_price) || 0).toLocaleString()}/suit
+                            </p>
                           </div>
-                        ))}
+                          <div className="hidden md:flex flex-wrap gap-1">
+                            {sizes.length > 0 ? sizes.map(([sz, q]) => (
+                              <span key={sz} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-semibold">{sz}:{q}</span>
+                            )) : <span className="text-[11px] text-gray-300">-</span>}
+                          </div>
+                          <p className="hidden md:block text-right text-sm text-gray-700">{Number(entry.quantity) || getEntryQtyFallback(entry)}</p>
+                          <p className="text-right text-sm font-semibold text-gray-900">
+                            PKR {(Number(entry.amount) || 0).toLocaleString()}
+                            <span className="md:hidden block text-[11px] font-normal text-gray-400">{Number(entry.quantity) || getEntryQtyFallback(entry)} suits</span>
+                          </p>
+                          <div className="flex items-center gap-1.5 col-span-1">
+                            <span title={bill.title} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${bill.cls}`}>{bill.text}</span>
+                            <span
+                              title={entry.paid ? `Paid (${entry.payment_method || 'Cash'})` : 'Payment pending'}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center ${entry.paid ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}
+                            >
+                              {entry.paid ? (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3"></path></svg>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-end gap-1">
+                            <button type="button" title="Edit" onClick={() => handleEditKhata(entry)} className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 9 17l.464-3.536z"></path></svg>
+                            </button>
+                            <button type="button" title="Delete" onClick={() => handleDeleteKhata(entry.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                          </div>
+                        </div>
+                        {showNote && (
+                          <p className="mt-1.5 text-[11px] text-gray-500 italic">📝 {entry.note}</p>
+                        )}
                       </div>
-
-                      <div className="p-4 sm:p-5 bg-slate-50 border-t border-gray-200">
-                        {(() => {
-                          const st = purchase.billStatuses ? [...purchase.billStatuses] : [];
-                          const label = st.length === 1 && st[0] === 'submitted' ? ['Bill submitted', 'bg-green-50 text-green-700 border-green-200']
-                            : st.length === 1 && st[0] === 'not_submitted' ? ['Bill not submitted', 'bg-orange-50 text-orange-700 border-orange-200']
-                            : st.includes('not_submitted') ? ['Some bills not submitted', 'bg-orange-50 text-orange-700 border-orange-200']
-                            : ['Bill status not recorded', 'bg-gray-100 text-gray-500 border-gray-200'];
-                          return <span className={`inline-flex mb-3 px-2.5 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wide ${label[1]}`}>{label[0]}</span>;
-                        })()}
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Note</p>
-                        <p className={`text-sm mt-1 ${purchase.note ? 'text-gray-700' : 'text-gray-400 italic'}`}>
-                          {purchase.note || 'No note added for this purchase.'}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <div className="py-12 text-center text-gray-400">No purchase history found.</div>
+                    );
+                  });
+                })() : (
+                  <div className="py-10 text-center text-sm text-gray-400">No entries for this filter.</div>
                 )}
               </div>
             </div>
