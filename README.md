@@ -14,7 +14,7 @@ This is also my **Final Year Project**.
 <img width="1360" height="619" alt="dashboard" src="https://github.com/user-attachments/assets/69d3cefb-abe4-44ee-b4f1-c4b944e679b6" />
 <img width="1365" height="623" alt="reports" src="https://github.com/user-attachments/assets/91f61173-90ba-400a-8a5d-3bcd4fc62e22" />
 <img width="1363" height="623" alt="dashboard-charts" src="https://github.com/user-attachments/assets/d5206b55-15ac-4c78-b218-dc3a872f9afd" />
-<img width="1354" height="621" alt="designs" src="https://github.com/user-attachments/assets/1d2bf0af-7456-4b71-a41d-c03f7380c568" />
+
 
 
 
