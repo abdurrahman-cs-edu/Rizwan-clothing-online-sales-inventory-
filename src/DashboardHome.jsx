@@ -217,7 +217,7 @@ function LegendList({ data, colors, total }) {
 }
 
 // ---------- Main ----------
-export default function DashboardHome({ sales = [], canonicalDesignName = (n) => n, onOpenSale, onGoTo, onShowOrders, isPendingCod }) {
+export default function DashboardHome({ sales = [], canonicalDesignName = (n) => n, onOpenSale, onGoTo, onShowOrders, isPendingCod, canonicalCity = (c) => c }) {
   const [fabricByName, setFabricByName] = useState({});
   const [period, setPeriod] = useState('week');
   const [postExCityByPrefix, setPostExCityByPrefix] = useState({});
@@ -334,7 +334,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
     const riderSales = sales.filter(x => (x.cod_sub_option || '') === 'Local Rider');
     const cityMap = new Map();
     riderSales.forEach(x => {
-      const c = (x.city || 'Unknown').trim() || 'Unknown';
+      const c = (x.city || '').trim() ? canonicalCity(x.city) : 'Unknown';
       cityMap.set(c, (cityMap.get(c) || 0) + 1);
     });
     const cities = topWithOther(cityMap);
@@ -344,7 +344,8 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
     const postExMap = new Map();
     postExSales.forEach(x => {
       const prefix = String(x.orderCode || '').split('-')[0].trim().toUpperCase();
-      const c = (x.city || '').trim() || postExCityByPrefix[prefix] || 'Unknown';
+      const typed = (x.city || '').trim();
+      const c = typed ? canonicalCity(typed) : (postExCityByPrefix[prefix] ? canonicalCity(postExCityByPrefix[prefix]) : 'Unknown');
       postExMap.set(c, (postExMap.get(c) || 0) + 1);
     });
     const postExCities = topWithOther(postExMap);
@@ -391,7 +392,7 @@ export default function DashboardHome({ sales = [], canonicalDesignName = (n) =>
       fabrics, fabricKnown,
       recent: sales.slice(0, 6),
     };
-  }, [sales, canonicalDesignName, fabricByName, postExCityByPrefix, isPendingCod]);
+  }, [sales, canonicalDesignName, fabricByName, postExCityByPrefix, isPendingCod, canonicalCity]);
 
   // ---------- Sales Overview chart (Today / This Week / This Month / This Year) ----------
   const chart = useMemo(() => {

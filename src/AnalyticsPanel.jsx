@@ -5,6 +5,7 @@ import {
   CartesianGrid, Tooltip, LabelList, Cell
 } from 'recharts';
 import { supabase } from './supabaseClient';
+import { buildCityIndex } from './cityUtils';
 
 // Charts & Reports tab.
 // One date filter at the top, then a choice of report: Sales, Designs, Sizes,
@@ -339,6 +340,8 @@ export default function AnalyticsPanel() {
       { name: 'Shop Pickup', value: O.filter(o => o.cod_sub_option === 'Shop Pickup').length },
       { name: 'Not recorded', value: O.filter(o => !['PostEx', 'Local Rider', 'Shop Pickup'].includes(o.cod_sub_option)).length },
     ];
+    // Spelling variants of one city (peshwar / Peshawar) are counted together.
+    const cityIdx = buildCityIndex(orders.map(o => o.city).filter(Boolean), Object.values(pxCodes));
     const cityRows = (rows, cityOf) => {
       const m = new Map();
       rows.forEach(o => {
@@ -348,10 +351,10 @@ export default function AnalyticsPanel() {
       });
       return Array.from(m.values()).sort((a, b) => b.parcels - a.parcels);
     };
-    const riderCities = cityRows(O.filter(o => o.cod_sub_option === 'Local Rider'), o => titleCase(o.city) || 'Unknown');
+    const riderCities = cityRows(O.filter(o => o.cod_sub_option === 'Local Rider'), o => (o.city ? cityIdx.canonical(o.city) : '') || 'Unknown');
     const postexCities = cityRows(O.filter(o => o.cod_sub_option === 'PostEx'), o => {
       const prefix = String(o.orderCode || '').split('-')[0].trim().toUpperCase();
-      return titleCase(o.city) || pxCodes[prefix] || 'Unknown';
+      return (o.city ? cityIdx.canonical(o.city) : '') || (pxCodes[prefix] ? cityIdx.canonical(pxCodes[prefix]) : '') || 'Unknown';
     });
 
     // Profit (gross): sale amount - suits x design cost. Uses the CURRENT cost of each design.
